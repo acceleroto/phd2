@@ -34,9 +34,7 @@ If found:
 - `CurrentPosition()` is set to the primary star’s centroid.
 - The **camera-space error** is computed as:
 
-  \[
-  \mathrm{cameraOfs} = \mathrm{primary} - \mathrm{lockPos}
-  \]
+  - `cameraOfs = primary - lockPos`
 
 If not found:
 
@@ -56,9 +54,8 @@ The refinement idea is:
 - Each secondary star has a `referencePoint` recorded when the star list is built/refreshed.
 - When a secondary star is found again, its displacement is computed:
 
-  \[
-  dX = X - \mathrm{referencePoint.X}, \quad dY = Y - \mathrm{referencePoint.Y}
-  \]
+  - `dX = X - referencePoint.X`
+  - `dY = Y - referencePoint.Y`
 
 - A weighted average displacement is formed (weights are based on relative SNR).
 - If the refined displacement is “better” than the primary-only displacement (smaller distance), classic multi-star replaces the camera offset with the refined one.
