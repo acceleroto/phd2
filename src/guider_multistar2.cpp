@@ -410,12 +410,23 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
         // - circles around lost stars (orange dotted)
         // - box around aggregate solution point
         // - status text bottom-right: "Multi-stars: X/Y"
+        // - "multistar2" tag top-right when selected
 
         EnsureStarStateSize();
 
         wxPen greenPen(wxColour(0, 255, 0), 1, wxPENSTYLE_SOLID);
         wxPen lostPen(wxColour(230, 130, 30), 1, wxPENSTYLE_DOT);
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
+
+        // Tag: show when the multistar2 guider has been selected/instantiated
+        if (GetState() >= STATE_SELECTING)
+        {
+            wxString tag = wxS("multistar2");
+            wxSize tsz = dc.GetTextExtent(tag);
+            int x = XWinSize - tsz.GetWidth() - 5;
+            int y = 5;
+            dc.DrawText(tag, x, y);
+        }
 
         // Draw circles for stars (skip if no multistar mode or subframes forced)
         bool showStars = m_multiStarMode && m_guideStars.size() > 1 && !pCamera->UseSubframes && GetState() >= STATE_SELECTED;
