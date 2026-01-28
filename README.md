@@ -21,6 +21,11 @@ PHD2’s built-in help file is an excellent way to get started using the program
   - **Multistar2 overview**: [`multistar2_description.md`](multistar2_description.md)
   - **Development phases (A/B/C)**: [`multistar2_development_phases.md`](multistar2_development_phases.md)
 
+## Fork status
+
+- Do not use this yet.
+- Windows 32-bit version is built. Initial testing is in progress.
+
 ## Installing and running this fork
 
 - **Required dependency**: Install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). ([Microsoft Redistributable Downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version))
