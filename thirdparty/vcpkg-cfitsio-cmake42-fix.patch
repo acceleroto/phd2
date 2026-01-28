@@ -1,0 +1,10 @@
+--- a/ports/cfitsio/portfile.cmake
++++ b/ports/cfitsio/portfile.cmake
+@@ -38,6 +38,7 @@ vcpkg_cmake_configure(
+     SOURCE_PATH "${SOURCE_PATH}"
+     PREFER_NINJA
+     OPTIONS
++        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+         -DUseCurl=OFF
+         -DUSE_PTHREADS=
+     OPTIONS_DEBUG

@@ -752,7 +752,15 @@ elseif(WIN32)
   list(APPEND phd2_WIN_SRC ${PHD_PROJECT_ROOT_DIR}/phd.rc)
   source_group(src FILES precompiled_header.cpp)
 
-  link_directories("C:/Program Files (x86)/Visual Leak Detector/lib/win32")
+  # Visual Leak Detector (VLD) is optional. If installed, pick the correct
+  # library folder for the target architecture; otherwise don't add it.
+  if(VLD_INCLUDE)
+    if(CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+      link_directories("C:/Program Files (x86)/Visual Leak Detector/lib/win64")
+    else()
+      link_directories("C:/Program Files (x86)/Visual Leak Detector/lib/win32")
+    endif()
+  endif()
   add_executable(
     phd2
     WIN32
@@ -767,7 +775,10 @@ elseif(WIN32)
       LINK_FLAGS_DEBUG "/NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrt.lib"
   )
 
-  target_include_directories(phd2 PRIVATE "C:/Program Files (x86)/Visual Leak Detector/include")
+  if(VLD_INCLUDE)
+    # VLD_INCLUDE already points at the include dir (e.g. .../Visual Leak Detector/include)
+    target_include_directories(phd2 PRIVATE ${VLD_INCLUDE})
+  endif()
 
   # copy DLL files into the output directory
 

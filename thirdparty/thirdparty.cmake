@@ -73,16 +73,16 @@ if(WIN32)
   FetchContent_Declare(
     vcpkg
     GIT_REPOSITORY https://github.com/microsoft/vcpkg.git
-    GIT_TAG f7423ee180c4b7f40d43402c2feb3859161ef625
-    UPDATE_COMMAND bootstrap-vcpkg.bat -disableMetrics
+    GIT_TAG 2025.01.13
+    UPDATE_COMMAND cmd /c "if not exist vcpkg.exe bootstrap-vcpkg.bat -disableMetrics"
     COMMAND ${CMAKE_COMMAND} -E echo "Building vcpkg cfitsio"
-    COMMAND vcpkg install --binarysource=default --no-print-usage cfitsio:${WINDOWS_ARCH}-windows
+    COMMAND ./vcpkg.exe install --binarysource=default --no-print-usage cfitsio:${WINDOWS_ARCH}-windows
     COMMAND ${CMAKE_COMMAND} -E echo "Building vcpkg curl[ssl]"
-    COMMAND vcpkg install --binarysource=default --no-print-usage curl[ssl]:${WINDOWS_ARCH}-windows
+    COMMAND ./vcpkg.exe install --binarysource=default --no-print-usage curl[ssl]:${WINDOWS_ARCH}-windows
     COMMAND ${CMAKE_COMMAND} -E echo "Building vcpkg eigen3"
-    COMMAND vcpkg install --binarysource=default --no-print-usage eigen3:${WINDOWS_ARCH}-windows
+    COMMAND ./vcpkg.exe install --binarysource=default --no-print-usage eigen3:${WINDOWS_ARCH}-windows
     COMMAND ${CMAKE_COMMAND} -E echo "Building vcpkg opencv4"
-    COMMAND vcpkg install --binarysource=default --no-print-usage opencv4:${WINDOWS_ARCH}-windows
+    COMMAND ./vcpkg.exe install --binarysource=default --no-print-usage opencv4:${WINDOWS_ARCH}-windows
   )
   message(STATUS "Preparing VCPKG")
   FetchContent_MakeAvailable(vcpkg)
@@ -531,7 +531,7 @@ else()
   # adding indi as a dependency allows a developer to build phd2 in
   # the IDE without explicitly building anything else first, but this
   # slows down incremental development
-  # list(APPEND PHD_EXTERNAL_PROJECT_DEPENDENCIES indi)
+  list(APPEND PHD_EXTERNAL_PROJECT_DEPENDENCIES indi)
 endif()
 
 #############################################
@@ -561,7 +561,8 @@ if(WIN32)
     message(STATUS "Disabling VLD: DISABLE_VLD is set")
   endif()
 
-  include_directories(${VCPKG_INCLUDE}/opencv2)
+  # vcpkg installs OpenCV headers under include/opencv4/opencv2
+  include_directories(${VCPKG_INCLUDE}/opencv4)
   list(APPEND PHD_LINK_EXTERNAL_DEBUG
       ${VCPKG_DEBUG_LIB}/opencv_imgproc4d.lib
       ${VCPKG_DEBUG_LIB}/opencv_highgui4d.lib
