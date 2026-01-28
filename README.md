@@ -23,7 +23,7 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 ## Installing and running this fork
 
-- **Required dependency**: Install the latest Microsoft Visual C++ Redistributable for Visual Studio 2015–2022 (x64).
+- **Required dependency**: Install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). ([Microsoft Learn](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version))
 - **Run**: Unzip the build folder and double-click `phd2.exe`.
 
 ## License
