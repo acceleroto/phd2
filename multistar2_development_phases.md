@@ -2,8 +2,6 @@
 
 This document summarizes the changes made to the PHD2 codebase while developing the experimental multi-star guider (“multistar2”), organized by phases.
 
-It intentionally does **not** cover local build environment setup (CMake/wxWidgets/etc.).
-
 ---
 
 ## Phase A — Scaffold + opt-in selection (no behavior change)
@@ -12,7 +10,7 @@ It intentionally does **not** cover local build environment setup (CMake/wxWidge
 
 Create a safe, opt-in path for a new multi-star guider implementation without disturbing the existing (classic) guider behavior.
 
-### What we changed in PHD2 (infrastructure/UI)
+### What was changed in PHD2 (infrastructure/UI)
 
 - **Added a new guider class** (scaffold)
   - Added `src/guider_multistar2.h`
@@ -33,7 +31,7 @@ Create a safe, opt-in path for a new multi-star guider implementation without di
   - Updated `CMakeLists.txt` to include the new multistar2 source files.
   - Updated `src/guiders.h` to include the new guider header.
 
-### What we added in the guider
+### What was added in the guider
 
 - `GuiderMultiStar2` existed and could be selected, but it was intentionally behavior-equivalent to classic multi-star.
 
@@ -45,12 +43,12 @@ Create a safe, opt-in path for a new multi-star guider implementation without di
 
 Ensure that when multi-star guiding is enabled, the guider does not drop frames / report StarLost just because one star (including the original primary) is lost—**as long as at least one usable star remains**.
 
-### What we changed in PHD2 (supporting refactors)
+### What was changed in PHD2 (supporting refactors)
 
 - Updated `src/guider_multistar.h` to make classic guider internals available to the derived class:
   - Promoted key state (e.g. `m_primaryStar`, `m_guideStars`, and related flags/parameters) to `protected` so multistar2 can implement new logic cleanly.
 
-### What we added/changed in the guider
+### What was added/changed in the guider
 
 - Implemented Phase B logic in `GuiderMultiStar2` by overriding:
   - `UpdateCurrentPosition(...)`
@@ -81,7 +79,7 @@ Make multi-star failover **continuous and stable**:
 - Per-star mass-change rejection (bad star does not break guiding).
 - Clear UI indicators of contributing vs lost stars and multistar2 status.
 
-### What we added/changed in the guider
+### What was added/changed in the guider
 
 - **Continuity-safe solution math**
   - Switched from an “absolute estimated primary” model to a **displacement-from-reference** model:
@@ -107,7 +105,7 @@ Make multi-star failover **continuous and stable**:
       - `X` = contributing stars now
       - `Y` = max concurrently contributing stars since star selection (session max)
 
-### What we changed in PHD2 (non-guider code)
+### What was changed in PHD2 (non-guider code)
 
 - macOS/arm64 build robustness: updated `thirdparty/thirdparty.cmake` to avoid linking bundled x86_64-only camera SDKs on Apple Silicon (while keeping arm64-capable SDKs enabled).
 
@@ -120,7 +118,7 @@ Make multi-star failover **continuous and stable**:
 - `src/guider_multistar2.cpp`
 - `multistar_description.md`
 - `multistar2_description.md`
-- `multistar2_phases.md` (this document)
+- `multistar2_development_phases.md` (this document)
 
 ### Updated files (high level)
 - `src/guider_multistar.h` (enable derived-class access to classic state)
