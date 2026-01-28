@@ -38,5 +38,6 @@
 
 #include "guider.h"
 #include "guider_multistar.h"
+#include "guider_multistar2.h"
 
 #endif /* GUIDERS_H_INCLUDED */

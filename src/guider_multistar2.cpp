@@ -1,0 +1,479 @@
+/*
+ *  guider_multistar2.cpp
+ *  PHD Guiding
+ *
+ *  Experimental multi-star guider (opt-in via Advanced Settings).
+ *
+ *  Phase A: scaffold only. Behavior matches classic GuiderMultiStar.
+ */
+ 
+#include "phd.h"
+#include "guider_multistar2.h"
+
+#include <algorithm>
+#include <deque>
+#include <utility>
+#include <vector>
+ 
+static wxString StarStatus2(const Star& star)
+{
+    wxString status = wxString::Format(_("m=%.0f SNR=%.1f"), star.Mass, star.SNR);
+
+    if (star.GetError() == Star::STAR_SATURATED)
+        status += _T(" ") + _("Saturated");
+
+    int exp;
+    bool auto_exp;
+    pFrame->GetExposureInfo(&exp, &auto_exp);
+
+    if (auto_exp)
+    {
+        status += _T(" ");
+        if (exp >= 1)
+            status += wxString::Format(_("Exp=%0.1f s"), (double) exp / 1000.);
+        else
+            status += wxString::Format(_("Exp=%d ms"), exp);
+    }
+
+    return status;
+}
+
+GuiderMultiStar2::GuiderMultiStar2(wxWindow *parent) : GuiderMultiStar(parent) { }
+ 
+GuiderMultiStar2::~GuiderMultiStar2() { }
+ 
+wxString GuiderMultiStar2::GetSettingsSummary() const
+{
+    // Keep classic summary, but tag the implementation for log visibility.
+    wxString s = GuiderMultiStar::GetSettingsSummary();
+    if (!s.empty())
+        s = "MultiStar2 (experimental): " + s;
+    return s;
+}
+
+void GuiderMultiStar2::EnsureStarStateSize()
+{
+    if (m_starState.size() != m_guideStars.size())
+        m_starState.resize(m_guideStars.size());
+}
+
+bool GuiderMultiStar2::IsLocked() const
+{
+    return m_solutionStar.WasFound();
+}
+
+const PHD_Point& GuiderMultiStar2::CurrentPosition() const
+{
+    return m_solutionStar;
+}
+
+const Star& GuiderMultiStar2::PrimaryStar() const
+{
+    // For UI/status reporting, prefer a real found star with Mass/SNR/HFD.
+    return m_displayStar.WasFound() ? m_displayStar : m_primaryStar;
+}
+
+wxString GuiderMultiStar2::GetStarCount() const
+{
+    // Phase C: show contributing / max concurrent contributing this session.
+    return wxString::Format("%u/%u", m_solutionStarsUsed, m_maxConcurrentStarsUsed);
+}
+
+void GuiderMultiStar2::InvalidateCurrentPosition(bool fullReset)
+{
+    // Mirror GuiderMultiStar::InvalidateCurrentPosition (can't call it directly; it's private there)
+    m_primaryStar.Invalidate();
+    if (fullReset)
+    {
+        m_primaryStar.X = m_primaryStar.Y = 0.0;
+    }
+    m_solutionStar.Invalidate();
+    m_displayStar.Invalidate();
+    m_solutionStarsUsed = 0;
+    m_maxConcurrentStarsUsed = 0;
+    m_starState.clear();
+}
+
+bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset *ofs, FrameDroppedInfo *errorInfo)
+{
+    // Phase C:
+    // Compute the guiding offset from per-star displacements relative to each star's reference point.
+    // This preserves continuity (no systematic step) when stars are lost or re-acquired.
+
+    static const unsigned int REACQUIRE_GOOD_FRAMES = 3;
+
+    const Star prevSolution(m_solutionStar);
+    const PHD_Point prevDisp = (prevSolution.WasFound() && LockPosition().IsValid()) ? (prevSolution - LockPosition())
+                                                                                     : PHD_Point(0.0, 0.0);
+
+    m_solutionStar.Invalidate();
+    m_displayStar.Invalidate();
+    m_solutionStarsUsed = 0;
+    EnsureStarStateSize();
+    for (auto& st : m_starState)
+    {
+        st.foundThisFrame = false;
+        st.contributingThisFrame = false;
+    }
+
+    // No star selected / no list
+    if (!m_primaryStar.IsValid() && m_primaryStar.X == 0.0 && m_primaryStar.Y == 0.0)
+    {
+        errorInfo->starError = Star::STAR_ERROR;
+        errorInfo->starMass = 0.0;
+        errorInfo->starSNR = 0.0;
+        errorInfo->starHFD = 0.0;
+        errorInfo->status = _("No star selected");
+        ImageLogger::LogImageStarDeselected(pImage);
+        return true;
+    }
+
+    const PHD_Point& lockPos = LockPosition();
+    bool raOnly = MyFrame::GuidingRAOnly();
+
+    // Mass-change normalization (match classic behavior: normalize by exposure when auto-exposure is enabled)
+    int exposureMs = 0;
+    bool isAutoExp = false;
+    pFrame->GetExposureInfo(&exposureMs, &isAutoExp);
+    auto adjMass = [&](double mass) -> double {
+        if (isAutoExp && exposureMs > 0)
+            return mass / (double) exposureMs;
+        return mass;
+    };
+
+    auto massReject = [&](StarState& st, double mass) -> bool {
+        if (!m_massChangeThresholdEnabled)
+            return false;
+
+        // Keep a simple time window, similar spirit to MassChecker
+        wxLongLong_t now = ::wxGetUTCTimeMillis().GetValue();
+        wxLongLong_t oldest = now - 22500 * 2; // DefaultTimeWindowMs * 2 in classic
+
+        while (!st.massHist.empty() && st.massHist.front().first < oldest)
+            st.massHist.pop_front();
+
+        double am = adjMass(mass);
+        st.massHist.push_back({ now, am });
+
+        if (st.massHist.size() < 5)
+            return false;
+
+        std::vector<double> tmp;
+        tmp.reserve(st.massHist.size());
+        for (const auto& e : st.massHist)
+            tmp.push_back(e.second);
+
+        size_t mid = tmp.size() / 2;
+        std::nth_element(tmp.begin(), tmp.begin() + mid, tmp.end());
+        double med = tmp[mid];
+
+        if (med > st.highMass)
+            st.highMass = med;
+        if (med < st.lowMass)
+            st.lowMass = med;
+        st.lowMass += .05 * (med - st.lowMass); // drift low-water mark upward
+
+        double low = st.lowMass * (1. - m_massChangeThreshold);
+        double high = st.highMass * (1. + m_massChangeThreshold);
+        double spike = med * (1. + 2.0 * m_massChangeThreshold);
+
+        return am < low || am > high || am > spike;
+    };
+
+    struct Found
+    {
+        size_t idx;
+        Star star;
+        bool eligible; // found + passes mass + passes gating
+    };
+    std::vector<Found> found;
+    found.reserve(m_guideStars.size());
+
+    // Determine whether we can use secondaries (respect subframes behavior)
+    bool allowSecondaries = m_multiStarMode && m_guideStars.size() > 1 && !pCamera->UseSubframes;
+
+    // Use last solution as reference primary estimate for searching lost secondaries
+    PHD_Point refPrimary = prevSolution.WasFound() ? static_cast<const PHD_Point&>(prevSolution)
+                                                   : static_cast<const PHD_Point&>(m_primaryStar);
+
+    // Find/update each star in m_guideStars (index 0 is primary)
+    for (size_t i = 0; i < m_guideStars.size(); i++)
+    {
+        if (i > 0 && !allowSecondaries)
+            break;
+
+        GuideStar& gs = m_guideStars[i];
+        StarState& st = m_starState[i];
+
+        GuideStar s(gs);
+        bool ok = false;
+
+        if (st.lastPosValid)
+        {
+            ok = s.Find(pImage, m_searchRegion, st.lastPos.X, st.lastPos.Y, pFrame->GetStarFindMode(), GetMinStarHFD(),
+                        GetMaxStarHFD(), pCamera->GetSaturationADU(), Star::FIND_LOGGING_MINIMAL);
+        }
+        else if (i == 0)
+        {
+            ok = s.Find(pImage, m_searchRegion, pFrame->GetStarFindMode(), GetMinStarHFD(), GetMaxStarHFD(),
+                        pCamera->GetSaturationADU(), Star::FIND_LOGGING_VERBOSE);
+        }
+        else
+        {
+            PHD_Point expected = refPrimary + gs.offsetFromPrimary;
+            ok = s.Find(pImage, m_searchRegion, expected.X, expected.Y, pFrame->GetStarFindMode(), GetMinStarHFD(), GetMaxStarHFD(),
+                        pCamera->GetSaturationADU(), Star::FIND_LOGGING_MINIMAL);
+        }
+
+        st.foundThisFrame = ok;
+        if (!ok)
+        {
+            gs.wasLost = true;
+            st.reacquireGoodCount = 0;
+            continue;
+        }
+
+        // Update star record + last-known position
+        gs.X = s.X;
+        gs.Y = s.Y;
+        gs.Mass = s.Mass;
+        gs.SNR = s.SNR;
+        gs.HFD = s.HFD;
+        gs.PeakVal = s.PeakVal;
+        st.lastPos.SetXY(s.X, s.Y);
+        st.lastPosValid = true;
+
+        // reacquire gating
+        if (gs.wasLost)
+            st.reacquireGoodCount++;
+        else
+            st.reacquireGoodCount = REACQUIRE_GOOD_FRAMES; // stable by default
+
+        // mass-change rejection (per star)
+        bool reject = massReject(st, s.Mass);
+
+        bool gatedIn = st.reacquireGoodCount >= REACQUIRE_GOOD_FRAMES;
+        bool eligible = gatedIn && !reject;
+
+        // Mark as "found but not contributing yet" if gated/rejected
+        found.push_back({ i, s, eligible });
+    }
+
+    if (found.empty())
+    {
+        errorInfo->starError = Star::STAR_ERROR;
+        errorInfo->starMass = 0.0;
+        errorInfo->starSNR = 0.0;
+        errorInfo->starHFD = 0.0;
+        errorInfo->status = _("Star lost");
+        ImageLogger::LogImage(pImage, *errorInfo);
+        return true;
+    }
+
+    // Determine base displacement to preserve continuity when adding stars
+    PHD_Point baseDisp = prevDisp;
+    {
+        double sumW = 0.0, sumDX = 0.0, sumDY = 0.0;
+        for (const auto& f : found)
+        {
+            if (!f.eligible)
+                continue;
+            const GuideStar& gs = m_guideStars[f.idx];
+            double w = f.star.SNR > 0.0 ? f.star.SNR : 1.0;
+            sumW += w;
+            sumDX += w * (f.star.X - gs.referencePoint.X);
+            sumDY += w * (f.star.Y - gs.referencePoint.Y);
+        }
+        if (sumW > 0.0)
+            baseDisp.SetXY(sumDX / sumW, sumDY / sumW);
+    }
+
+    // For stars transitioning into "eligible", pin their referencePoint so they don't pull the solution
+    for (const auto& f : found)
+    {
+        if (!f.eligible)
+            continue;
+        GuideStar& gs = m_guideStars[f.idx];
+        if (gs.wasLost && m_starState[f.idx].reacquireGoodCount == REACQUIRE_GOOD_FRAMES)
+        {
+            gs.referencePoint.X = f.star.X - baseDisp.X;
+            gs.referencePoint.Y = f.star.Y - baseDisp.Y;
+            gs.wasLost = false;
+        }
+        else if (!gs.referencePoint.IsValid())
+        {
+            gs.referencePoint.X = f.star.X - baseDisp.X;
+            gs.referencePoint.Y = f.star.Y - baseDisp.Y;
+            gs.wasLost = false;
+        }
+        else
+        {
+            gs.wasLost = false;
+        }
+    }
+
+    // Compute final displacement from all eligible stars
+    double sumW = 0.0, sumDX = 0.0, sumDY = 0.0;
+    size_t best = (size_t) -1;
+    for (const auto& f : found)
+    {
+        if (!f.eligible)
+            continue;
+        const GuideStar& gs = m_guideStars[f.idx];
+        double w = f.star.SNR > 0.0 ? f.star.SNR : 1.0;
+        sumW += w;
+        sumDX += w * (f.star.X - gs.referencePoint.X);
+        sumDY += w * (f.star.Y - gs.referencePoint.Y);
+        m_starState[f.idx].contributingThisFrame = true;
+        if (best == (size_t) -1 || f.star.SNR > found[best].star.SNR)
+            best = &f - &found[0];
+    }
+
+    PHD_Point disp = baseDisp;
+    if (sumW > 0.0)
+        disp.SetXY(sumDX / sumW, sumDY / sumW);
+
+    // Build solution star from lockPos + displacement
+    if (lockPos.IsValid())
+        m_solutionStar.SetXY(lockPos.X + disp.X, lockPos.Y + disp.Y);
+    else
+        m_solutionStar.SetXY(m_primaryStar.X + disp.X, m_primaryStar.Y + disp.Y);
+
+    m_solutionStar.SetError(Star::STAR_OK);
+
+    // Contributing count and session max
+    unsigned int contributing = 0;
+    for (const auto& st : m_starState)
+        if (st.contributingThisFrame)
+            contributing++;
+    m_solutionStarsUsed = contributing;
+    if (contributing > m_maxConcurrentStarsUsed)
+        m_maxConcurrentStarsUsed = contributing;
+
+    // Choose display star: best eligible if possible, else best found
+    if (best != (size_t) -1)
+        m_displayStar = found[best].star;
+    else
+    {
+        size_t bestFound = 0;
+        for (size_t i = 1; i < found.size(); i++)
+            if (found[i].star.SNR > found[bestFound].star.SNR)
+                bestFound = i;
+        m_displayStar = found[bestFound].star;
+    }
+
+    // Populate status fields from the display star
+    m_solutionStar.Mass = m_displayStar.Mass;
+    m_solutionStar.SNR = m_displayStar.SNR;
+    m_solutionStar.HFD = m_displayStar.HFD;
+    m_solutionStar.PeakVal = m_displayStar.PeakVal;
+
+    // Compute offsets vs lock position (as in classic)
+    if (lockPos.IsValid())
+    {
+        ofs->cameraOfs = m_solutionStar - lockPos;
+
+        if (pMount && pMount->IsCalibrated())
+            pMount->TransformCameraCoordinatesToMountCoordinates(ofs->cameraOfs, ofs->mountOfs, true);
+
+        double distance = raOnly ? fabs(m_solutionStar.X - lockPos.X) : m_solutionStar.Distance(lockPos);
+        double distanceRA = ofs->mountOfs.IsValid() ? fabs(ofs->mountOfs.X) : 0.;
+        UpdateCurrentDistance(distance, distanceRA);
+    }
+
+    // Use a real star location for profile display.
+    pFrame->pProfile->UpdateData(pImage, m_displayStar.X, m_displayStar.Y);
+    pFrame->AdjustAutoExposure(m_displayStar.SNR);
+    pFrame->UpdateStatusBarStarInfo(m_displayStar.SNR, m_displayStar.GetError() == Star::STAR_SATURATED);
+
+    errorInfo->starError = Star::STAR_OK;
+    errorInfo->starMass = m_displayStar.Mass;
+    errorInfo->starSNR = m_displayStar.SNR;
+    errorInfo->starHFD = m_displayStar.HFD;
+    errorInfo->status = StarStatus2(m_displayStar);
+
+    return false;
+}
+
+void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
+{
+    wxAutoBufferedPaintDC dc(this);
+    wxMemoryDC memDC;
+
+    try
+    {
+        if (PaintHelper(dc, memDC))
+            return;
+
+        // Phase C overlays:
+        // - circles around contributing stars (green)
+        // - circles around lost stars (orange dotted)
+        // - box around aggregate solution point
+        // - status text bottom-right: "Multi-stars: X/Y"
+
+        EnsureStarStateSize();
+
+        wxPen greenPen(wxColour(0, 255, 0), 1, wxPENSTYLE_SOLID);
+        wxPen lostPen(wxColour(230, 130, 30), 1, wxPENSTYLE_DOT);
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+
+        // Draw circles for stars (skip if no multistar mode or subframes forced)
+        bool showStars = m_multiStarMode && m_guideStars.size() > 1 && !pCamera->UseSubframes && GetState() >= STATE_SELECTED;
+        if (showStars)
+        {
+            for (size_t i = 0; i < m_guideStars.size(); i++)
+            {
+                const StarState& st = m_starState[i];
+                if (!st.lastPosValid)
+                    continue;
+
+                wxPoint pt((int) (st.lastPos.X * m_scaleFactor), (int) (st.lastPos.Y * m_scaleFactor));
+                if (st.contributingThisFrame)
+                    dc.SetPen(greenPen);
+                else
+                    dc.SetPen(lostPen);
+                dc.DrawCircle(pt, 6);
+            }
+        }
+
+        // Draw box around aggregate solution point when star is selected+
+        if (GetState() >= STATE_SELECTED && m_solutionStar.IsValid())
+        {
+            dc.SetPen(wxPen(wxColour(32, 196, 32), 1, wxPENSTYLE_SOLID));
+            int side = (int) ROUND((m_searchRegion * 2 + 1) * m_scaleFactor);
+            int left = (int) ROUND((m_solutionStar.X - m_searchRegion) * m_scaleFactor);
+            int top = (int) ROUND((m_solutionStar.Y - m_searchRegion) * m_scaleFactor);
+
+            dc.DrawRectangle(left, top, side, side);
+
+            // Phase C UI: distinguish multistar2 by adding 4 ticks on the outside midpoints of the box,
+            // so it looks like a hollow "+" sign added to the box.
+            int tick = wxMax(1, side / 2);
+            int midX = left + side / 2;
+            int midY = top + side / 2;
+
+            // top / bottom ticks
+            dc.DrawLine(midX, top - 1, midX, top - tick);
+            dc.DrawLine(midX, top + side, midX, top + side + tick - 1);
+
+            // left / right ticks
+            dc.DrawLine(left - 1, midY, left - tick, midY);
+            dc.DrawLine(left + side, midY, left + side + tick - 1, midY);
+        }
+
+        // Status text: only when multistar2 is active and a star is selected
+        if (GetState() >= STATE_SELECTED && m_multiStarMode)
+        {
+            wxString msg = wxString::Format("Multi-stars: %u/%u", m_solutionStarsUsed, m_maxConcurrentStarsUsed);
+            wxSize tsz = dc.GetTextExtent(msg);
+            int x = XWinSize - tsz.GetWidth() - 5;
+            int y = YWinSize - tsz.GetHeight() - 5;
+            dc.DrawText(msg, x, y);
+        }
+    }
+    catch (const wxString& Msg)
+    {
+        POSSIBLY_UNUSED(Msg);
+    }
+}
+

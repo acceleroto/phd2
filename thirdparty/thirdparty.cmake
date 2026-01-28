@@ -927,56 +927,87 @@ if(APPLE)
 
   find_path(CARBON_INCLUDE_DIR Carbon.h)
 
+  # ------------------------------------------------------------
+  # Apple Silicon note:
+  #
+  # Several bundled third-party camera SDKs in-tree are x86_64-only
+  # and will be ignored by the arm64 linker, resulting in undefined
+  # symbols when building on Apple Silicon. For arm64 builds, enable
+  # only SDKs that provide an arm64 slice.
+  #
+  set(PHD_OSX_ARM64 FALSE)
+  if(CMAKE_OSX_ARCHITECTURES)
+    if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+      set(PHD_OSX_ARM64 TRUE)
+    endif()
+  else()
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+      set(PHD_OSX_ARM64 TRUE)
+    endif()
+  endif()
+
   #############################################
   # Camera frameworks
   #
-  find_library( sbigudFramework
-                NAMES SBIGUDrv
-                PATHS ${thirdparty_dir}/frameworks)
-  add_definitions(-DHAVE_SBIG_CAMERA=1)
-  if(NOT sbigudFramework)
-    message(FATAL_ERROR "Cannot find the SBIGUDrv drivers")
-  endif()
-  include_directories(${sbigudFramework})
-  add_definitions(-DHAVE_SBIG_CAMERA=1)
-  list(APPEND PHD_LINK_EXTERNAL ${sbigudFramework})
-  list(APPEND phd2_OSX_FRAMEWORKS ${sbigudFramework})
-
-  find_library( asiCamera2
-                NAMES ASICamera2
-                PATHS ${PHD_PROJECT_ROOT_DIR}/cameras/zwolibs/mac)
-  if(NOT asiCamera2)
-    message(FATAL_ERROR "Cannot find the asiCamera2 drivers")
-  endif()
-  include_directories(${PHD_PROJECT_ROOT_DIR}/cameras/zwolibs/include)
-  add_definitions(-DHAVE_ZWO_CAMERA=1)
-  list(APPEND PHD_LINK_EXTERNAL ${asiCamera2})
-  list(APPEND phd2_OSX_FRAMEWORKS ${asiCamera2})
-
-  find_library( SVBCameraSDK
-                NAMES SVBCameraSDK
-                PATHS ${PHD_PROJECT_ROOT_DIR}/cameras/svblibs/mac/x64)
-  if(NOT SVBCameraSDK)
-    message(FATAL_ERROR "Cannot find the Svbony SDK libs")
+  if(PHD_OSX_ARM64)
+    message(STATUS "Skipping SBIG camera SDK on Apple Silicon (no arm64 slice in bundled SBIGUDrv.framework)")
+  else()
+    find_library( sbigudFramework
+                  NAMES SBIGUDrv
+                  PATHS ${thirdparty_dir}/frameworks)
+    if(NOT sbigudFramework)
+      message(FATAL_ERROR "Cannot find the SBIGUDrv drivers")
+    endif()
+    include_directories(${sbigudFramework})
+    add_definitions(-DHAVE_SBIG_CAMERA=1)
+    list(APPEND PHD_LINK_EXTERNAL ${sbigudFramework})
+    list(APPEND phd2_OSX_FRAMEWORKS ${sbigudFramework})
   endif()
 
-  if(SVBCameraSDK)
+  if(PHD_OSX_ARM64)
+    message(STATUS "Skipping ZWO camera SDK on Apple Silicon (no arm64 slice in bundled libASICamera2.dylib)")
+  else()
+    find_library( asiCamera2
+                  NAMES ASICamera2
+                  PATHS ${PHD_PROJECT_ROOT_DIR}/cameras/zwolibs/mac)
+    if(NOT asiCamera2)
+      message(FATAL_ERROR "Cannot find the asiCamera2 drivers")
+    endif()
+    include_directories(${PHD_PROJECT_ROOT_DIR}/cameras/zwolibs/include)
+    add_definitions(-DHAVE_ZWO_CAMERA=1)
+    list(APPEND PHD_LINK_EXTERNAL ${asiCamera2})
+    list(APPEND phd2_OSX_FRAMEWORKS ${asiCamera2})
+  endif()
+
+  if(PHD_OSX_ARM64)
+    message(STATUS "Skipping Svbony camera SDK on Apple Silicon (no arm64 slice in bundled libSVBCameraSDK.dylib)")
+  else()
+    find_library( SVBCameraSDK
+                  NAMES SVBCameraSDK
+                  PATHS ${PHD_PROJECT_ROOT_DIR}/cameras/svblibs/mac/x64)
+    if(NOT SVBCameraSDK)
+      message(FATAL_ERROR "Cannot find the Svbony SDK libs")
+    endif()
     add_definitions(-DHAVE_SVB_CAMERA=1)
     include_directories(${PHD_PROJECT_ROOT_DIR}/cameras/svblibs/include)
     list(APPEND PHD_LINK_EXTERNAL ${SVBCameraSDK})
     list(APPEND phd2_OSX_FRAMEWORKS ${SVBCameraSDK})
   endif()
 
-  find_library( qhylib
-                NAMES qhyccd
-                PATHS ${PHD_PROJECT_ROOT_DIR}/cameras/qhyccdlibs/mac/universal)
-  if(NOT qhylib)
-    message(FATAL_ERROR "Cannot find the qhy SDK libs")
+  if(PHD_OSX_ARM64)
+    message(STATUS "Skipping QHY camera SDK on Apple Silicon (no arm64 slice in bundled libqhyccd.dylib)")
+  else()
+    find_library( qhylib
+                  NAMES qhyccd
+                  PATHS ${PHD_PROJECT_ROOT_DIR}/cameras/qhyccdlibs/mac/universal)
+    if(NOT qhylib)
+      message(FATAL_ERROR "Cannot find the qhy SDK libs")
+    endif()
+    add_definitions(-DHAVE_QHY_CAMERA=1)
+    include_directories(${PHD_PROJECT_ROOT_DIR}/cameras/qhyccdlibs/include)
+    list(APPEND PHD_LINK_EXTERNAL ${qhylib})
+    list(APPEND phd2_OSX_FRAMEWORKS ${qhylib})
   endif()
-  add_definitions(-DHAVE_QHY_CAMERA=1)
-  include_directories(${PHD_PROJECT_ROOT_DIR}/cameras/qhyccdlibs/include)
-  list(APPEND PHD_LINK_EXTERNAL ${qhylib})
-  list(APPEND phd2_OSX_FRAMEWORKS ${qhylib})
 
   find_library( toupcam
                 NAMES toupcam
@@ -989,15 +1020,19 @@ if(APPLE)
   add_definitions(-DHAVE_TOUPTEK_CAMERA=1)
   list(APPEND phd2_OSX_FRAMEWORKS ${toupcam})
 
-  find_library( ogmacam
-                NAMES ogmacam
-                PATHS ${ogmacamsdk_SOURCE_DIR}/mac/x64+x86)
-  if(NOT ogmacam)
-    message(FATAL_ERROR "Cannot find the ogmacam drivers")
+  if(PHD_OSX_ARM64)
+    message(STATUS "Skipping Ogma camera SDK on Apple Silicon (no arm64 slice in bundled libogmacam.dylib)")
+  else()
+    find_library( ogmacam
+                  NAMES ogmacam
+                  PATHS ${ogmacamsdk_SOURCE_DIR}/mac/x64+x86)
+    if(NOT ogmacam)
+      message(FATAL_ERROR "Cannot find the ogmacam drivers")
+    endif()
+    list(APPEND PHD_LINK_EXTERNAL ${ogmacam})
+    add_definitions(-DHAVE_OGMA_CAMERA=1)
+    list(APPEND phd2_OSX_FRAMEWORKS ${ogmacam})
   endif()
-  list(APPEND PHD_LINK_EXTERNAL ${ogmacam})
-  add_definitions(-DHAVE_OGMA_CAMERA=1)
-  list(APPEND phd2_OSX_FRAMEWORKS ${ogmacam})
 
   set(LIBOPENSSAG openssag)
   set(libopenssag_dir ${thirdparty_dir}/${LIBOPENSSAG}/src)

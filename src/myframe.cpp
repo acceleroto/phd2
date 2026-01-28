@@ -251,21 +251,21 @@ MyFrame::MyFrame()
     LoadProfileSettings();
 
     // Setup container window for alert message info bar and guider window
-    wxWindow *guiderWin = new wxWindow(this, wxID_ANY);
-    wxSizer *sizer = new wxBoxSizer(wxVERTICAL);
+    m_guiderWin = new wxWindow(this, wxID_ANY);
+    m_guiderSizer = new wxBoxSizer(wxVERTICAL);
 
-    m_infoBar = new wxInfoBar(guiderWin);
+    m_infoBar = new wxInfoBar(m_guiderWin);
     m_infoBar->Connect(BUTTON_ALERT_ACTION, wxEVT_BUTTON, wxCommandEventHandler(MyFrame::OnAlertButton), nullptr, this);
     m_infoBar->Connect(BUTTON_ALERT_DONTSHOW, wxEVT_BUTTON, wxCommandEventHandler(MyFrame::OnAlertButton), nullptr, this);
     m_infoBar->Connect(BUTTON_ALERT_CLOSE, wxEVT_BUTTON, wxCommandEventHandler(MyFrame::OnAlertButton), nullptr, this);
     m_infoBar->Connect(BUTTON_ALERT_HELP, wxEVT_BUTTON, wxCommandEventHandler(MyFrame::OnAlertHelp), nullptr, this);
 
-    sizer->Add(m_infoBar, wxSizerFlags().Expand());
+    m_guiderSizer->Add(m_infoBar, wxSizerFlags().Expand());
 
-    pGuider = new GuiderMultiStar(guiderWin);
-    sizer->Add(pGuider, wxSizerFlags().Proportion(1).Expand());
+    pGuider = CreateSelectedGuider(m_guiderWin);
+    m_guiderSizer->Add(pGuider, wxSizerFlags().Proportion(1).Expand());
 
-    guiderWin->SetSizer(sizer);
+    m_guiderWin->SetSizer(m_guiderSizer);
 
     pGuider->LoadProfileSettings();
 
@@ -304,9 +304,9 @@ MyFrame::MyFrame()
 
     m_mgr.AddPane(MainToolbar, wxAuiPaneInfo().Name(_T("MainToolBar")).Caption(_T("Main tool bar")).ToolbarPane().Bottom());
 
-    guiderWin->SetMinSize(wxSize(XWinSize, YWinSize));
-    guiderWin->SetSize(wxSize(XWinSize, YWinSize));
-    m_mgr.AddPane(guiderWin,
+    m_guiderWin->SetMinSize(wxSize(XWinSize, YWinSize));
+    m_guiderWin->SetSize(wxSize(XWinSize, YWinSize));
+    m_mgr.AddPane(m_guiderWin,
                   wxAuiPaneInfo().Name(_T("Guider")).Caption(_T("Guider")).CenterPane().MinSize(wxSize(XWinSize, YWinSize)));
 
     pGraphLog = new GraphLogWindow(this);
@@ -359,7 +359,8 @@ MyFrame::MyFrame()
     wxImage Cursor = wxImage(mac_xhair);
     Cursor.SetOption(wxIMAGE_OPTION_CUR_HOTSPOT_X, 8);
     Cursor.SetOption(wxIMAGE_OPTION_CUR_HOTSPOT_Y, 8);
-    pGuider->SetCursor(wxCursor(Cursor));
+    m_guiderCursor = wxCursor(Cursor);
+    pGuider->SetCursor(m_guiderCursor);
 
     m_continueCapturing = false;
     CaptureActive = false;
@@ -414,6 +415,73 @@ MyFrame::MyFrame()
 
     // this forces force a resize of MainToolbar in case size changed from the saved perspective
     MainToolbar->Realize();
+}
+
+static const wxString MULTISTAR_IMPL_KEY = "/guider/multistar/implementation";
+static const wxString MULTISTAR_IMPL_EXPERIMENTAL = "experimental";
+
+Guider *MyFrame::CreateSelectedGuider(wxWindow *parent)
+{
+    bool experimental = false;
+    if (pConfig && pConfig->Profile.HasEntry(MULTISTAR_IMPL_KEY))
+    {
+        wxString val = pConfig->Profile.GetString(MULTISTAR_IMPL_KEY, wxEmptyString);
+        experimental = val.CmpNoCase(MULTISTAR_IMPL_EXPERIMENTAL) == 0 || val.CmpNoCase("multistar2") == 0;
+    }
+
+    if (experimental)
+        return new GuiderMultiStar2(parent);
+    else
+        return new GuiderMultiStar(parent);
+}
+
+void MyFrame::QueueGuiderRecreate()
+{
+    if (CaptureActive)
+        return;
+
+    // Defer until after the Advanced dialog OK handler completes, so we don't
+    // invalidate any dialog-owned pointers while UnloadValues is running.
+    this->CallAfter([this]() { this->RecreateGuiderNow(); });
+}
+
+void MyFrame::RecreateGuiderNow()
+{
+    if (CaptureActive || !m_guiderWin || !m_guiderSizer || !pGuider)
+        return;
+
+    // Determine desired implementation from profile settings.
+    bool wantExperimental = false;
+    if (pConfig && pConfig->Profile.HasEntry(MULTISTAR_IMPL_KEY))
+    {
+        wxString val = pConfig->Profile.GetString(MULTISTAR_IMPL_KEY, wxEmptyString);
+        wantExperimental = val.CmpNoCase(MULTISTAR_IMPL_EXPERIMENTAL) == 0 || val.CmpNoCase("multistar2") == 0;
+    }
+
+    bool haveExperimental = dynamic_cast<GuiderMultiStar2 *>(pGuider) != nullptr;
+    if (wantExperimental == haveExperimental)
+        return;
+
+    // Remove and destroy the old guider window.
+    m_guiderSizer->Detach(pGuider);
+    pGuider->Destroy();
+    pGuider = nullptr;
+
+    // Create and attach the new guider.
+    pGuider = CreateSelectedGuider(m_guiderWin);
+    m_guiderSizer->Add(pGuider, wxSizerFlags().Proportion(1).Expand());
+    m_guiderWin->Layout();
+
+    // Reload guider settings and restore UI-affecting options.
+    pGuider->LoadProfileSettings();
+    if (m_guiderCursor.IsOk())
+        pGuider->SetCursor(m_guiderCursor);
+
+    bool sticky = pConfig->Global.GetBoolean("/StickyLockPosition", false);
+    pGuider->SetLockPosIsSticky(sticky);
+    tools_menu->Check(EEGG_STICKY_LOCK, sticky);
+
+    UpdateButtonsStatus();
 }
 
 MyFrame::~MyFrame()

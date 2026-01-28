@@ -220,6 +220,11 @@ public:
     virtual ~MyFrame();
 
     Guider *pGuider;
+    // Parent container for the info bar and guider window. Stored so we can
+    // destroy/recreate the guider when the multi-star implementation changes.
+    wxWindow *m_guiderWin;
+    wxSizer *m_guiderSizer;
+    wxCursor m_guiderCursor;
     wxMenuBar *Menubar;
     wxMenu *tools_menu, *view_menu, *bookmarks_menu, *darks_menu;
     wxMenuItem *m_showBookmarksMenuItem;
@@ -279,6 +284,10 @@ public:
     wxSize m_prevDarkFrameSize;
 
     void RegisterTextCtrl(wxTextCtrl *ctrl);
+
+    // Schedule a guider re-create after UI events complete (e.g. Advanced dialog OK).
+    // No-op while CaptureActive is true.
+    void QueueGuiderRecreate();
 
     void OnMenuHighlight(wxMenuEvent& evt);
     void OnAnyMenu(wxCommandEvent& evt);
@@ -488,6 +497,9 @@ public:
                                          double initial = 0, double inc = 1, const wxString& name = wxT("wxSpinCtrlDouble"));
 
 private:
+    Guider *CreateSelectedGuider(wxWindow *parent);
+    void RecreateGuiderNow();
+
     wxCriticalSection m_CSpWorkerThread;
     WorkerThread *m_pPrimaryWorkerThread;
     WorkerThread *m_pSecondaryWorkerThread;

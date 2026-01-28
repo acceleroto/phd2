@@ -65,6 +65,8 @@ public:
     wxCheckBox *m_pUseMultiStars;
     wxSpinCtrlDouble *m_MinSNR;
     wxSpinCtrlDouble *m_MaxHFD;
+    wxChoice *m_pMultiStarImpl;
+    int m_initMultiStarImplSelection;
 
     virtual void LoadValues();
     virtual void UnloadValues();
@@ -74,6 +76,7 @@ public:
 
 class GuiderMultiStar : public Guider
 {
+protected:
     Star m_primaryStar;
     std::vector<GuideStar> m_guideStars;
     DescriptiveStats *m_primaryDistStats;
@@ -143,11 +146,11 @@ public:
     void LoadProfileSettings() override;
 
 private:
-    bool IsValidLockPosition(const PHD_Point& pt) final;
-    bool IsValidSecondaryStarPosition(const PHD_Point& pt) final;
-    void InvalidateCurrentPosition(bool fullReset = false) final;
-    bool UpdateCurrentPosition(const usImage *pImage, GuiderOffset *ofs, FrameDroppedInfo *errorInfo) final;
-    bool SetCurrentPosition(const usImage *pImage, const PHD_Point& position) final;
+    bool IsValidLockPosition(const PHD_Point& pt) override;
+    bool IsValidSecondaryStarPosition(const PHD_Point& pt) override;
+    void InvalidateCurrentPosition(bool fullReset = false) override;
+    bool UpdateCurrentPosition(const usImage *pImage, GuiderOffset *ofs, FrameDroppedInfo *errorInfo) override;
+    bool SetCurrentPosition(const usImage *pImage, const PHD_Point& position) override;
 
     void OnLClick(wxMouseEvent& evt);
 

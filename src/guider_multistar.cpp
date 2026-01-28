@@ -1448,6 +1448,13 @@ GuiderMultiStarConfigDialogCtrlSet::GuiderMultiStarConfigDialogCtrlSet(wxWindow 
     GetParentWindow(AD_szStarTracking)
         ->Bind(wxEVT_COMMAND_CHECKBOX_CLICKED, &GuiderMultiStarConfigDialogCtrlSet::OnMultiStarChecked, this,
                MULTI_STAR_ENABLE);
+
+    wxString implChoices[] = { _("Classic (multistar)"), _("Experimental (multistar2)") };
+    m_pMultiStarImpl =
+        new wxChoice(GetParentWindow(AD_szStarTracking), wxID_ANY, wxDefaultPosition, wxDefaultSize, WXSIZEOF(implChoices),
+                     implChoices);
+    m_pMultiStarImpl->SetToolTip(_("Select which multi-star guiding implementation to use."));
+    m_initMultiStarImplSelection = 0;
     width = StringWidth(_T("100.0"));
 
     m_MinSNR = pFrame->MakeSpinCtrlDouble(GetParentWindow(AD_szStarTracking), wxID_ANY, wxEmptyString, wxDefaultPosition,
@@ -1467,7 +1474,10 @@ GuiderMultiStarConfigDialogCtrlSet::GuiderMultiStarConfigDialogCtrlSet(wxWindow 
     pTrackingParams->Add(pHFD, wxSizerFlags().Border(wxTOP, 3));
     pTrackingParams->Add(pSNR, wxSizerFlags().Border(wxLEFT, 75));
     pTrackingParams->Add(pMaxHFD, wxSizerFlags().Border(wxTOP, 4));
-    pTrackingParams->Add(m_pUseMultiStars, wxSizerFlags(0).Border(wxLEFT, 75));
+    wxSizer *multiStarSizer = new wxBoxSizer(wxHORIZONTAL);
+    multiStarSizer->Add(m_pUseMultiStars, wxSizerFlags(0).Align(wxALIGN_CENTER_VERTICAL));
+    multiStarSizer->Add(m_pMultiStarImpl, wxSizerFlags(0).Border(wxLEFT, 8).Align(wxALIGN_CENTER_VERTICAL));
+    pTrackingParams->Add(multiStarSizer, wxSizerFlags(0).Border(wxLEFT, 75));
     pTrackingParams->Add(m_pBeepForLostStarCtrl, wxSizerFlags().Border(wxTOP, 3));
     pTrackingParams->Add(dsamp, wxSizerFlags().Border(wxTOP, 3).Right());
 
@@ -1489,6 +1499,24 @@ void GuiderMultiStarConfigDialogCtrlSet::LoadValues()
     m_autoSelDownsample->SetSelection(m_pGuiderMultiStar->GetAutoSelDownsample());
     m_pBeepForLostStarCtrl->SetValue(pFrame->GetBeepForLostStar());
     m_pUseMultiStars->SetValue(m_pGuiderMultiStar->GetMultiStarMode());
+
+    // Multi-star implementation selection is opt-in. Default (missing key) is Classic.
+    static const wxString MULTISTAR_IMPL_KEY = "/guider/multistar/implementation";
+    int sel = 0; // Classic
+    if (pConfig->Profile.HasEntry(MULTISTAR_IMPL_KEY))
+    {
+        wxString val = pConfig->Profile.GetString(MULTISTAR_IMPL_KEY, wxEmptyString);
+        if (val.CmpNoCase("experimental") == 0 || val.CmpNoCase("multistar2") == 0)
+            sel = 1;
+    }
+    m_pMultiStarImpl->SetSelection(sel);
+    m_initMultiStarImplSelection = sel;
+
+    // Disabled while looping/capturing.
+    bool enable = !pFrame->CaptureActive;
+    m_pUseMultiStars->Enable(enable);
+    m_pMultiStarImpl->Enable(enable);
+
     GuiderConfigDialogCtrlSet::LoadValues();
 }
 
@@ -1505,6 +1533,20 @@ void GuiderMultiStarConfigDialogCtrlSet::UnloadValues()
     if (m_pBeepForLostStarCtrl->GetValue() != pFrame->GetBeepForLostStar())
         pFrame->SetBeepForLostStar(m_pBeepForLostStarCtrl->GetValue());
     m_pGuiderMultiStar->SetMultiStarMode(m_pUseMultiStars->GetValue());
+
+    // Save implementation selection only when explicitly choosing Experimental.
+    // Classic is represented by the key being absent.
+    static const wxString MULTISTAR_IMPL_KEY = "/guider/multistar/implementation";
+    int sel = m_pMultiStarImpl->GetSelection();
+    bool changed = sel != m_initMultiStarImplSelection;
+    if (sel == 1)
+        pConfig->Profile.SetString(MULTISTAR_IMPL_KEY, "experimental");
+    else if (pConfig->Profile.HasEntry(MULTISTAR_IMPL_KEY))
+        pConfig->Profile.DeleteEntry(MULTISTAR_IMPL_KEY);
+
+    if (changed)
+        pFrame->QueueGuiderRecreate();
+
     GuiderConfigDialogCtrlSet::UnloadValues();
 }
 

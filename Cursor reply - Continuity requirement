@@ -1,0 +1,15 @@
+5) Continuity requirement when star count changes (no jump)
+Understood: if the tracked set changes, the solution vector used for guiding must remain unchanged at the transition moment.
+Implementation-wise, that means multistar2 needs an explicit “anchoring” rule: when a star is dropped/added, we must adjust internal references (or maintain a separate solution reference) such that the computed 
+d
+d stays identical on that frame.
+Safety feature interaction (mass change + tolerate jumps) — discussion + recommendation
+Keeping them “the same” is reasonable from a UX standpoint, but we should clarify what “same” means when there is no single primary:
+Mass change detection
+Today it’s effectively a primary-star gate (if mass changed too much, reject the frame / treat as lost).
+For multistar2, I recommend: apply mass-change detection per-star as an inclusion test (i.e., a star that violates it is excluded for that frame), but do not fail the whole frame unless all stars are excluded/lost.
+This matches your “no disruption unless all stars are lost” goal and makes the feature more useful.
+Tolerate jumps
+Today it’s a primary-to-lock distance gate via DistanceChecker.
+For multistar2, I recommend applying the jump/tolerance test to the solution displacement (the averaged multi-star displacement) — i.e., reject outlier solutions, but keep guiding if the solution is stable.
+Optional nuance later: also allow per-star outlier rejection (robust estimator), but that’s internal and doesn’t change the UI.

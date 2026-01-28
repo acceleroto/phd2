@@ -1,3 +1,5 @@
 TAGS
 /tmp*
 /.vscode
+build_cursor/
+build/
