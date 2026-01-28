@@ -8,9 +8,9 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 ## Links
 
-- **Project website / news**: `https://openphdguiding.org/`
-- **User support + development forum**: `https://groups.google.com/forum/#!forum/open-phd-guiding`
-- **Source code repository (upstream)**: `https://github.com/OpenPHDGuiding`
+- **Project website / news**: [openphdguiding.org](https://openphdguiding.org/)
+- **User support + development forum**: [Open PHD Guiding forum (Google Groups)](https://groups.google.com/forum/#!forum/open-phd-guiding)
+- **Source code repository (upstream)**: [github.com/OpenPHDGuiding](https://github.com/OpenPHDGuiding)
 
 ## Features of this fork
 
@@ -22,5 +22,5 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 ## License
 
-See `LICENSE.txt`.
+See [`LICENSE.txt`](LICENSE.txt).
 
