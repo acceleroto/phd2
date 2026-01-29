@@ -472,6 +472,11 @@ void MyFrame::RecreateGuiderNow()
     m_guiderSizer->Add(pGuider, wxSizerFlags().Proportion(1).Expand());
     m_guiderWin->Layout();
 
+    // Advanced Settings dialog caches ctrl-sets that reference the current guider.
+    // After recreating the guider, force a rebuild before the next time Advanced Settings is shown.
+    if (pAdvancedDialog)
+        pAdvancedDialog->UpdateGuiderPage();
+
     // Reload guider settings and restore UI-affecting options.
     pGuider->LoadProfileSettings();
     if (m_guiderCursor.IsOk())

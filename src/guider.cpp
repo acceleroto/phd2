@@ -320,7 +320,6 @@ bool Guider::SetOverlayMode(int overlayMode)
     }
 
     Refresh();
-    Update();
 
     return bError;
 }
@@ -398,7 +397,6 @@ void Guider::SetOverlaySlitCoords(const wxPoint& center, const wxSize& size, int
     }
 
     Refresh();
-    Update();
 }
 
 void Guider::EnableFastRecenter(bool enable)

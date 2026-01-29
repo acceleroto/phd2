@@ -446,6 +446,11 @@ void AdvancedDialog::UpdateRotatorPage()
     m_rebuildPanels = true;
 }
 
+void AdvancedDialog::UpdateGuiderPage()
+{
+    m_rebuildPanels = true;
+}
+
 void AdvancedDialog::LoadValues()
 {
     // Late-binding rebuild of all the panels

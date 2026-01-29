@@ -95,6 +95,7 @@ public:
     void UpdateMountPage();
     void UpdateAoPage();
     void UpdateRotatorPage();
+    void UpdateGuiderPage();
 
     void LoadValues();
     void UnloadValues();

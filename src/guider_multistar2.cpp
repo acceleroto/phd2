@@ -38,7 +38,12 @@ static wxString StarStatus2(const Star& star)
     return status;
 }
 
-GuiderMultiStar2::GuiderMultiStar2(wxWindow *parent) : GuiderMultiStar(parent) { }
+GuiderMultiStar2::GuiderMultiStar2(wxWindow *parent) : GuiderMultiStar(parent)
+{
+    // Ensure our override is actually used for paint events. GuiderMultiStar registers its own
+    // EVT_PAINT handler via an event table, which does not virtual-dispatch to overrides.
+    Bind(wxEVT_PAINT, &GuiderMultiStar2::OnPaint, this);
+}
  
 GuiderMultiStar2::~GuiderMultiStar2() { }
  
@@ -418,6 +423,11 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
         wxPen lostPen(wxColour(230, 130, 30), 1, wxPENSTYLE_DOT);
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
 
+        // Match Star Profile "Mid row FWHM:" text color (red)
+        const wxColour kOverlayTextColor(255, 0, 0);
+        const wxColour prevTextColor = dc.GetTextForeground();
+        dc.SetTextForeground(kOverlayTextColor);
+
         // Tag: show when the multistar2 guider has been selected/instantiated
         if (GetState() >= STATE_SELECTING)
         {
@@ -429,7 +439,8 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
         }
 
         // Draw circles for stars (skip if no multistar mode or subframes forced)
-        bool showStars = m_multiStarMode && m_guideStars.size() > 1 && !pCamera->UseSubframes && GetState() >= STATE_SELECTED;
+        bool useSubframes = pCamera && pCamera->UseSubframes;
+        bool showStars = m_multiStarMode && m_guideStars.size() > 1 && !useSubframes && GetState() >= STATE_SELECTED;
         if (showStars)
         {
             for (size_t i = 0; i < m_guideStars.size(); i++)
@@ -457,19 +468,21 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
 
             dc.DrawRectangle(left, top, side, side);
 
-            // Phase C UI: distinguish multistar2 by adding 4 ticks on the outside midpoints of the box,
-            // so it looks like a hollow "+" sign added to the box.
-            int tick = wxMax(1, side / 2);
-            int midX = left + side / 2;
-            int midY = top + side / 2;
+            // Phase C UI: distinguish multistar2 by adding 45-degree corner ticks.
+            // Make each tick as long as the side of the square.
+            int tickLen = wxMax(1, side);
+            int d = wxMax(1, (int) ROUND((double) tickLen / sqrt(2.0)));
 
-            // top / bottom ticks
-            dc.DrawLine(midX, top - 1, midX, top - tick);
-            dc.DrawLine(midX, top + side, midX, top + side + tick - 1);
+            int x0 = left;
+            int x1 = left + side;
+            int y0 = top;
+            int y1 = top + side;
 
-            // left / right ticks
-            dc.DrawLine(left - 1, midY, left - tick, midY);
-            dc.DrawLine(left + side, midY, left + side + tick - 1, midY);
+            // top-left, top-right, bottom-left, bottom-right
+            dc.DrawLine(x0, y0, x0 - d, y0 - d);
+            dc.DrawLine(x1, y0, x1 + d, y0 - d);
+            dc.DrawLine(x0, y1, x0 - d, y1 + d);
+            dc.DrawLine(x1, y1, x1 + d, y1 + d);
         }
 
         // Status text: only when multistar2 is active and a star is selected
@@ -481,6 +494,8 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
             int y = YWinSize - tsz.GetHeight() - 5;
             dc.DrawText(msg, x, y);
         }
+
+        dc.SetTextForeground(prevTextColor);
     }
     catch (const wxString& Msg)
     {
