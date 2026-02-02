@@ -15,7 +15,7 @@
 // Compile-time switch for extra multistar2 logging.
 // Enable by adding -DMULTISTAR2_DEBUG_LOG=1 to your build.
 #ifndef MULTISTAR2_DEBUG_LOG
-#define MULTISTAR2_DEBUG_LOG 0
+#define MULTISTAR2_DEBUG_LOG 1
 #endif
 
 // Experimental multi-star guider. For Phase A this is a thin wrapper around the

@@ -15,11 +15,8 @@
 #include <utility>
 #include <vector>
 
-// Compile-time switch for extra multistar2 logging.
-// Enable by adding -DMULTISTAR2_DEBUG_LOG=1 to your build.
-#ifndef MULTISTAR2_DEBUG_LOG
-#define MULTISTAR2_DEBUG_LOG 1
-#endif
+// Compile-time switch for extra multistar2 logging:
+// see `guider_multistar2.h` (or pass -DMULTISTAR2_DEBUG_LOG=1 in your build).
 
 #if MULTISTAR2_DEBUG_LOG
 #define MS2LOGF(...) Debug.Write(wxString::Format(__VA_ARGS__))
