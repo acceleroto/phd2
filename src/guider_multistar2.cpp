@@ -14,6 +14,21 @@
 #include <deque>
 #include <utility>
 #include <vector>
+
+// Compile-time switch for extra multistar2 logging.
+// Enable by adding -DMULTISTAR2_DEBUG_LOG=1 to your build.
+#ifndef MULTISTAR2_DEBUG_LOG
+#define MULTISTAR2_DEBUG_LOG 1
+#endif
+
+#if MULTISTAR2_DEBUG_LOG
+#define MS2LOGF(...) Debug.Write(wxString::Format(__VA_ARGS__))
+#else
+#define MS2LOGF(...) \
+    do              \
+    {               \
+    } while (0)
+#endif
  
 static wxString StarStatus2(const Star& star)
 {
@@ -301,9 +316,18 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         GuideStar& gs = m_guideStars[f.idx];
         if (gs.wasLost && m_starState[f.idx].reacquireGoodCount == REACQUIRE_GOOD_FRAMES)
         {
+#if MULTISTAR2_DEBUG_LOG
+            const PHD_Point oldRef = gs.referencePoint;
+#endif
             gs.referencePoint.X = f.star.X - baseDisp.X;
             gs.referencePoint.Y = f.star.Y - baseDisp.Y;
             gs.wasLost = false;
+
+#if MULTISTAR2_DEBUG_LOG
+            MS2LOGF("MultiStar2: reacquire idx=%u reacqGood=%u star=(%.2f,%.2f) baseDisp=(%.3f,%.3f) ref: (%.3f,%.3f)->(%.3f,%.3f)\n",
+                    (unsigned int) f.idx, m_starState[f.idx].reacquireGoodCount, f.star.X, f.star.Y, baseDisp.X, baseDisp.Y,
+                    oldRef.X, oldRef.Y, gs.referencePoint.X, gs.referencePoint.Y);
+#endif
         }
         else if (!gs.referencePoint.IsValid())
         {
@@ -354,6 +378,79 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     m_solutionStarsUsed = contributing;
     if (contributing > m_maxConcurrentStarsUsed)
         m_maxConcurrentStarsUsed = contributing;
+
+#if MULTISTAR2_DEBUG_LOG
+    // Log only when the contributing membership changes, so it stays readable.
+    {
+        const unsigned int poolSize = (unsigned int) m_guideStars.size();
+        const unsigned int foundCount = (unsigned int) found.size(); // found (may include gated/rejected)
+        const unsigned int usedCount = m_solutionStarsUsed; // eligible + used this frame
+        const bool primaryContrib = !m_starState.empty() && m_starState[0].contributingThisFrame;
+
+        if (!m_dbgInited)
+        {
+            m_dbgInited = true;
+            m_dbgLastPoolSize = poolSize;
+            m_dbgLastFoundCount = foundCount;
+            m_dbgLastUsedCount = usedCount;
+            m_dbgLastPrimaryContrib = primaryContrib;
+            m_dbgLastDisp = prevDisp;
+            m_dbgLastContribMask.assign(poolSize, false);
+        }
+
+        if (m_dbgLastContribMask.size() != poolSize)
+            m_dbgLastContribMask.assign(poolSize, false);
+
+        std::vector<unsigned int> added;
+        std::vector<unsigned int> removed;
+        added.reserve(poolSize);
+        removed.reserve(poolSize);
+
+        for (unsigned int i = 0; i < poolSize; i++)
+        {
+            const bool now = m_starState[i].contributingThisFrame;
+            const bool was = m_dbgLastContribMask[i];
+            if (now != was)
+            {
+                (now ? added : removed).push_back(i);
+                m_dbgLastContribMask[i] = now;
+            }
+        }
+
+        const bool anyMembershipChange = !added.empty() || !removed.empty();
+        const bool anySummaryChange = (poolSize != m_dbgLastPoolSize) || (foundCount != m_dbgLastFoundCount) ||
+            (usedCount != m_dbgLastUsedCount) || (primaryContrib != m_dbgLastPrimaryContrib);
+
+        if (anyMembershipChange || anySummaryChange)
+        {
+            const PHD_Point dDisp = disp - m_dbgLastDisp;
+
+            wxString addedStr, removedStr;
+            if (!added.empty())
+            {
+                for (size_t j = 0; j < added.size(); j++)
+                    addedStr += wxString::Format("%s%u", j ? "," : "", added[j]);
+            }
+            if (!removed.empty())
+            {
+                for (size_t j = 0; j < removed.size(); j++)
+                    removedStr += wxString::Format("%s%u", j ? "," : "", removed[j]);
+            }
+
+            const PHD_Point& lockPosForLog = LockPosition();
+            MS2LOGF("MultiStar2: pool=%u found=%u used=%u primaryContrib=%d added=[%s] removed=[%s] "
+                    "disp=(%.3f,%.3f) dDisp=(%.3f,%.3f) lock=(%.3f,%.3f) sol=(%.3f,%.3f)\n",
+                    poolSize, foundCount, usedCount, primaryContrib ? 1 : 0, addedStr, removedStr, disp.X, disp.Y, dDisp.X,
+                    dDisp.Y, lockPosForLog.X, lockPosForLog.Y, m_solutionStar.X, m_solutionStar.Y);
+
+            m_dbgLastPoolSize = poolSize;
+            m_dbgLastFoundCount = foundCount;
+            m_dbgLastUsedCount = usedCount;
+            m_dbgLastPrimaryContrib = primaryContrib;
+            m_dbgLastDisp = disp;
+        }
+    }
+#endif
 
     // Choose display star: best eligible if possible, else best found
     if (best != (size_t) -1)

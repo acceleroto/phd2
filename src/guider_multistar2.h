@@ -12,6 +12,12 @@
  
 #include "guider_multistar.h"
  
+// Compile-time switch for extra multistar2 logging.
+// Enable by adding -DMULTISTAR2_DEBUG_LOG=1 to your build.
+#ifndef MULTISTAR2_DEBUG_LOG
+#define MULTISTAR2_DEBUG_LOG 0
+#endif
+
 // Experimental multi-star guider. For Phase A this is a thin wrapper around the
 // classic implementation; later phases will override selected virtual methods.
 class GuiderMultiStar2 : public GuiderMultiStar
@@ -54,6 +60,17 @@ private:
     unsigned int m_solutionStarsUsed = 0;        // contributing stars this frame
     unsigned int m_maxConcurrentStarsUsed = 0;   // max contributing since (re)select
     std::vector<StarState> m_starState;          // parallel to m_guideStars
+
+#if MULTISTAR2_DEBUG_LOG
+    // Debug-only state for change-triggered logging. Kept out of release builds.
+    bool m_dbgInited = false;
+    unsigned int m_dbgLastPoolSize = 0;
+    unsigned int m_dbgLastFoundCount = 0;
+    unsigned int m_dbgLastUsedCount = 0;
+    bool m_dbgLastPrimaryContrib = false;
+    PHD_Point m_dbgLastDisp;
+    std::vector<bool> m_dbgLastContribMask; // per guide-star contributing flag
+#endif
 };
  
 #endif /* GUIDER_MULTISTAR2_H_INCLUDED */
