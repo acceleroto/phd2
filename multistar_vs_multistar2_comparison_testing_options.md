@@ -7,7 +7,7 @@ Yes — and there are a couple practical levels of “test set” you can do, fr
 - **How you’d compare**: run an offline “replay” mode that feeds the same sequence of images to:
   - classic multistar
   - multistar2
-  and logs each frame’s computed \(dx,dy\), contributing-star set, and any discontinuities.
+  and logs each frame’s computed $dx,dy$, contributing-star set, and any discontinuities.
 - **Pros**: uses real data, captures real star loss/reacquire conditions.
 - **Cons**: needs some scaffolding (a harness to load frames and call the guider logic deterministically).
 
@@ -20,15 +20,15 @@ Yes — and there are a couple practical levels of “test set” you can do, fr
 ### Option C (fastest “comparison” without a full replay harness): use logs as the test vector
 - **What**: treat the debug log + guide log + new `MultiStar2:` membership-change lines as your dataset.
 - **How you’d compare**:
-  - For multistar2: detect each membership change and compute \(\Delta dx,\Delta dy\) at that frame.
+  - For multistar2: detect each membership change and compute $\Delta dx,\Delta dy$ at that frame.
   - For classic: you’d need comparable membership-change logging (or infer it imperfectly).
 - **Pros**: minimal engineering.
 - **Cons**: not apples-to-apples unless both guiders report the same internal signals.
 
 ### The key thing you’d want to log/compare
 To directly answer “what happens when stars are added/lost”, the comparison metric should be something like:
-- **Step response at membership change**: \(\Delta(dx,dy)\) right at the change
-- **Short-term drift**: slope of \(dx,dy\) over N frames after the change
+- **Step response at membership change**: $\Delta(dx,dy)$ right at the change
+- **Short-term drift**: slope of $dx,dy$ over N frames after the change
 - **RMS error** in windows before/after changes
 - **Membership timeline**: which stars were used each frame
 
