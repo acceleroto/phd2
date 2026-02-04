@@ -1449,7 +1449,7 @@ GuiderMultiStarConfigDialogCtrlSet::GuiderMultiStarConfigDialogCtrlSet(wxWindow 
         ->Bind(wxEVT_COMMAND_CHECKBOX_CLICKED, &GuiderMultiStarConfigDialogCtrlSet::OnMultiStarChecked, this,
                MULTI_STAR_ENABLE);
 
-    wxString implChoices[] = { _("Classic (multistar)"), _("Experimental (multistar2)") };
+    wxString implChoices[] = { _("Classic Multistar"), _("Multistar2") };
     m_pMultiStarImpl =
         new wxChoice(GetParentWindow(AD_szStarTracking), wxID_ANY, wxDefaultPosition, wxDefaultSize, WXSIZEOF(implChoices),
                      implChoices);

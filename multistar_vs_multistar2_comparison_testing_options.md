@@ -5,7 +5,7 @@ Yes — and there are a couple practical levels of “test set” you can do, fr
 ### Option A (practical, closest to real life): recorded guider frames + replay
 - **What**: collect a folder of guider frames (your new **ImageLogger** “CameraFrames…” output is already most of this), plus the key metadata needed to interpret them (pixel size, binning, exposure, search region, lock position, calibration transform, etc.).
 - **How you’d compare**: run an offline “replay” mode that feeds the same sequence of images to:
-  - classic multistar
+  - multistar
   - multistar2
   and logs each frame’s computed $dx,dy$, contributing-star set, and any discontinuities.
 - **Pros**: uses real data, captures real star loss/reacquire conditions.
@@ -21,7 +21,7 @@ Yes — and there are a couple practical levels of “test set” you can do, fr
 - **What**: treat the debug log + guide log + new `MultiStar2:` membership-change lines as your dataset.
 - **How you’d compare**:
   - For multistar2: detect each membership change and compute $\Delta dx,\Delta dy$ at that frame.
-  - For classic: you’d need comparable membership-change logging (or infer it imperfectly).
+  - For multistar: you’d need comparable membership-change logging (or infer it imperfectly).
 - **Pros**: minimal engineering.
 - **Cons**: not apples-to-apples unless both guiders report the same internal signals.
 

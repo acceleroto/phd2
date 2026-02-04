@@ -1,6 +1,6 @@
-# Classic multi-star guiding (PHD2 `GuiderMultiStar`)
+# Multistar guiding (PHD2 `GuiderMultiStar`)
 
-This document describes how PHD2’s **classic multi-star guiding** works (the implementation historically exposed via the “Use multiple stars” setting), and how it compares to baseline **single-star guiding**.
+This document describes how PHD2’s **multistar guiding** works (the implementation historically exposed via the “Use multiple stars” setting), and how it compares to baseline **single-star guiding**.
 
 Terminology used below (matching the code):
 
@@ -14,16 +14,16 @@ Terminology used below (matching the code):
 
 ## Big-picture overview
 
-Classic multi-star guiding in PHD2 is best described as:
+Multistar guiding in PHD2 is best described as:
 
 1. **Always** tracking a single **primary** star every frame (that star is the authoritative “current position”).
 2. Optionally using a set of **secondary stars** to **refine** the measured offset (the guide error) when guiding is stable.
 
-Critically: the classic implementation is still **primary-star-centric**. If the primary star cannot be found, classic multi-star guiding behaves like single-star guiding in that it reports a lost-star condition.
+Critically: multistar is still **primary-star-centric**. If the primary star cannot be found, multistar guiding behaves like single-star guiding in that it reports a lost-star condition.
 
 ---
 
-## How classic multi-star computes the guide error
+## How multistar computes the guide error
 
 ### 1) Primary-star tracking (always)
 
@@ -42,7 +42,7 @@ If not found:
 
 ### 2) Secondary-star refinement (when conditions allow)
 
-Classic multi-star uses secondary stars only in a refinement step (`RefineOffset(...)`), and only when:
+Multistar uses secondary stars only in a refinement step (`RefineOffset(...)`), and only when:
 
 - Multi-star mode is enabled
 - There are secondary stars in the list
@@ -58,7 +58,7 @@ The refinement idea is:
   - `dY = Y - referencePoint.Y`
 
 - A weighted average displacement is formed (weights are based on relative SNR).
-- If the refined displacement is “better” than the primary-only displacement (smaller distance), classic multi-star replaces the camera offset with the refined one.
+- If the refined displacement is “better” than the primary-only displacement (smaller distance), multistar replaces the camera offset with the refined one.
 
 ### 3) Star list creation (AutoFind)
 
@@ -73,7 +73,7 @@ The chosen “best” star becomes the **primary** (placed at list index 0), and
 
 ## Interaction with subframes / ROI (“Use subframes”)
 
-Classic multi-star does **not** use secondary stars when subframes are enabled (because the image content does not contain the full field needed to track multiple stars).
+Multistar does **not** use secondary stars when subframes are enabled (because the image content does not contain the full field needed to track multiple stars).
 
 Practically:
 
@@ -84,7 +84,7 @@ Practically:
 ## Pros vs single-star guiding
 
 - **Reduced sensitivity to one-star centroid noise** (in stable conditions): averaging over multiple stars can reduce random centroid jitter.
-- **Some robustness to transient issues affecting a secondary star**: classic multi-star can drop individual secondary stars (hot pixels, repeated misses, suspicious excursions) during refinement.
+- **Some robustness to transient issues affecting a secondary star**: multistar can drop individual secondary stars (hot pixels, repeated misses, suspicious excursions) during refinement.
 - **Better field sampling** when AutoFind selects stars spread across the ROI (helps average local distortions/noise).
 
 ---
@@ -93,16 +93,16 @@ Practically:
 
 - **More complexity**: more moving parts, more states (stabilizing, star list quality, heuristic drop rules).
 - **Field-dependent behavior**: performance depends on having enough suitable stars, and on the distribution/quality of those stars.
-- **Hidden “primary is king” coupling**: users may assume “multi-star” means “no single point of failure,” but classic still depends on the primary being found each frame.
+- **Hidden “primary is king” coupling**: users may assume “multi-star” means “no single point of failure,” but multistar still depends on the primary being found each frame.
 
 ---
 
-## Known limitations / improvement opportunities in classic multi-star
+## Known limitations / improvement opportunities in multistar
 
 These are behaviors that motivated the multistar2 work:
 
 - **Primary-star single point of failure**  
-  If the primary star is lost, classic multi-star produces a lost-star frame, which can pause guiding or trigger dead reckoning. It does not seamlessly fail over to remaining stars.
+  If the primary star is lost, multistar produces a lost-star frame, which can pause guiding or trigger dead reckoning. It does not seamlessly fail over to remaining stars.
 
 - **Continuity on star-count change is not guaranteed**  
   Since the primary star is authoritative, losing the primary (or re-selecting/changing the star set) can cause discontinuities in the effective guiding position.
@@ -111,11 +111,11 @@ These are behaviors that motivated the multistar2 work:
   “Star lost” semantics are tied to the primary. Losing one secondary star may be handled quietly, but losing the primary is treated as a guiding interruption even if other stars are still present.
 
 - **Subframe mode disables multi-star benefit**  
-  With subframes enabled, classic multi-star cannot effectively use multiple stars (by design/limitation of available pixel data).
+  With subframes enabled, multistar cannot effectively use multiple stars (by design/limitation of available pixel data).
 
 ---
 
 ## Summary
 
-Classic multi-star guiding improves guiding stability by optionally refining the primary star’s measured offset with information from secondary stars, but it remains fundamentally **primary-star-centric**. This yields benefits in typical conditions, but also leaves room for improvement in failover behavior and continuity when stars are lost or reacquired.
+Multistar guiding improves guiding stability by optionally refining the primary star’s measured offset with information from secondary stars, but it remains fundamentally **primary-star-centric**. This yields benefits in typical conditions, but also leaves room for improvement in failover behavior and continuity when stars are lost or reacquired.
 

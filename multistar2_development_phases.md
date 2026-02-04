@@ -19,8 +19,8 @@ Create a safe, opt-in path for a new multi-star guider implementation without di
 
 - **Added an Advanced Settings selector**
   - Updated `src/guider_multistar.cpp` / `src/guider_multistar.h` to add a UI drop-down next to “Use multiple stars”:
-    - **Classic (multistar)**
-    - **Experimental (multistar2)**
+    - **Classic Multistar**
+    - **Multistar2**
   - Persisted selection in the profile at `"/guider/multistar/implementation"` (classic is default when unset).
 
 - **Enabled safe runtime guider swapping**

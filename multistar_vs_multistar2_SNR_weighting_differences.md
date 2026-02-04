@@ -1,8 +1,8 @@
-## Classic multistar vs multistar2: SNR weighting differences
+## Multistar vs multistar2: SNR weighting differences
 
 ### Where the SNR weighting happens in each guider
 
-#### Classic multistar (`GuiderMultiStar::RefineOffset` in `src/guider_multistar.cpp`)
+#### Multistar (`GuiderMultiStar::RefineOffset` in `src/guider_multistar.cpp`)
 It starts with the **primary star offset** $d_0 = (dx,dy)$ already computed from the primary star vs lock position:
 
 - `sumX = origOffset.cameraOfs.X;`
@@ -22,13 +22,13 @@ and applies an SNR-derived weight:
 So the effective formula is:
 
 $$
-d_{\text{classic}} \;=\; \frac{1\cdot d_0 + \sum_i \left(\frac{\mathrm{SNR}_i}{\mathrm{SNR}_0}\right) d_i}{1 + \sum_i \left(\frac{\mathrm{SNR}_i}{\mathrm{SNR}_0}\right)}
+d_{\text{multistar}} \;=\; \frac{1\cdot d_0 + \sum_i \left(\frac{\mathrm{SNR}_i}{\mathrm{SNR}_0}\right) d_i}{1 + \sum_i \left(\frac{\mathrm{SNR}_i}{\mathrm{SNR}_0}\right)}
 $$
 
 Multiply numerator+denominator by $\mathrm{SNR}_0$:
 
 $$
-d_{\text{classic}} \;=\; \frac{\mathrm{SNR}_0 d_0 + \sum_i \mathrm{SNR}_i d_i}{\mathrm{SNR}_0 + \sum_i \mathrm{SNR}_i}
+d_{\text{multistar}} \;=\; \frac{\mathrm{SNR}_0 d_0 + \sum_i \mathrm{SNR}_i d_i}{\mathrm{SNR}_0 + \sum_i \mathrm{SNR}_i}
 $$
 
 That is: **a linear SNR-weighted mean including the primary**.
@@ -50,23 +50,23 @@ $$
 ### For the same set of stars, is the SNR weighting “the same”?
 **Yes, if all SNR values are positive and the same stars are included**, the weighting is effectively the same:
 
-- Classic uses weights proportional to \(\mathrm{SNR}_i\), just normalized by \(\mathrm{SNR}_0\). That normalization is a **constant scale factor** applied to all secondary weights, which **does not change** a weighted average.
-- And if you rewrite classic’s formula (above), it’s literally the same as using **absolute SNR weights** including the primary.
+- Multistar uses weights proportional to \(\mathrm{SNR}_i\), just normalized by \(\mathrm{SNR}_0\). That normalization is a **constant scale factor** applied to all secondary weights, which **does not change** a weighted average.
+- And if you rewrite multistar’s formula (above), it’s literally the same as using **absolute SNR weights** including the primary.
 
 So: **given identical included stars and their $d_i$, both are linear-SNR weighted means**.
 
 ### When do they differ in practice?
 They can differ because the *inputs* to the weighted average differ:
 
-- **Classic sometimes ignores the weighted solution entirely**: after averaging, it only applies the multistar result if it’s *smaller* than the primary-only error (`hypot(avg) < primaryDistance`). If not, it falls back to the primary-only result. multistar2 does not have this “only if smaller” rule.
+- **Multistar sometimes ignores the weighted solution entirely**: after averaging, it only applies the multistar result if it’s *smaller* than the primary-only error (`hypot(avg) < primaryDistance`). If not, it falls back to the primary-only result. multistar2 does not have this “only if smaller” rule.
 - **Different star inclusion/gating rules**:
-  - Classic has stabilization logic and rejects secondaries based on excursions, miss counts, zero-count, max-star cap, etc.
+  - Multistar has stabilization logic and rejects secondaries based on excursions, miss counts, zero-count, max-star cap, etc.
   - multistar2 has its own gating (`eligible` based on reacquire-good-frames + massReject, etc.).
 - **Corner case: non-positive SNR**:
-  - Classic: $wt = \mathrm{SNR}_i/\mathrm{SNR}_0$ → if a star’s SNR is 0, it contributes ~0 weight.
+  - Multistar: $wt = \mathrm{SNR}_i/\mathrm{SNR}_0$ → if a star’s SNR is 0, it contributes ~0 weight.
   - multistar2: if SNR ≤ 0, it uses weight 1.0 (so it would still contribute).
   - In real guiding, “found” stars typically have positive SNR, so this is usually theoretical.
 
 ### The biggest “behavioral” difference (not just weighting)
-multistar2’s continuity mechanism (pinning `referencePoint` on reacquire / first-eligibility) is designed so **adding a star doesn’t change the aggregate displacement**, regardless of that star’s SNR weight. Classic doesn’t do that continuity pinning in the same way, so membership changes can shift the mean more readily.
+multistar2’s continuity mechanism (pinning `referencePoint` on reacquire / first-eligibility) is designed so **adding a star doesn’t change the aggregate displacement**, regardless of that star’s SNR weight. Multistar doesn’t do that continuity pinning in the same way, so membership changes can shift the mean more readily.
 

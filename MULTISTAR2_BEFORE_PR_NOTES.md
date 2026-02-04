@@ -38,7 +38,7 @@ That said: **as an opt-in experimental feature, it’s plausibly PR-able** *afte
   - `GuiderMultiStar2` replaces the core model with an **aggregate “solution star”** and a separate **display star**. That’s a big conceptual change, not a refactor.
 
 - **Compatibility with existing guider behaviors (big risk area)**
-  - Classic multi-star integrates:
+  - Multistar integrates:
     - mass-change handling via `MassChecker`
     - distance/jump tolerance via `DistanceChecker`
     - consistent image logging, error reporting, and auto-exposure reset behavior
@@ -66,7 +66,7 @@ That said: **as an opt-in experimental feature, it’s plausibly PR-able** *afte
   - inaccurate “Phase A / matches classic” claims
 
 - **Technical review blockers**
-  - behavioral divergence vs classic without clearly preserving existing guider safeguards (distance/jump tolerance, logging parity, etc.)
+  - behavioral divergence vs multistar without clearly preserving existing guider safeguards (distance/jump tolerance, logging parity, etc.)
   - substantial code duplication (e.g., `StarStatus2`, mass-check logic) without a clear reuse strategy
   - user-visible behavior changes (star count semantics, overlays, untranslated strings in overlays)
 

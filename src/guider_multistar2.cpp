@@ -2,9 +2,47 @@
  *  guider_multistar2.cpp
  *  PHD Guiding
  *
- *  Experimental multi-star guider (opt-in via Advanced Settings).
+ *  Original guider_onestar Created by Craig Stark.
+ *  Copyright (c) 2006-2010 Craig Stark.
+ *  All rights reserved.
  *
- *  Phase A: scaffold only. Behavior matches classic GuiderMultiStar.
+ *  guider_onestar completely refactored by Bret McKee
+ *  Copyright (c) 2012 Bret McKee
+ *  All rights reserved.
+ *
+ *  guider_multistar extensions created by Bruce Waddington
+ *  Copyright (c) 2020 Bruce Waddington
+ *  All rights reserved.
+ *
+ *  guider_multistar2 created by Bryan Duke
+ *  Copyright (c) 2026 Bryan Duke
+ *  All rights reserved.
+ *
+ *  This source code is distributed under the following "BSD" license
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions are met:
+ *    Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *    Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the
+ *     documentation and/or other materials provided with the distribution.
+ *    Neither the name of Bret McKee, Dad Dog Development,
+ *     Craig Stark, Stark Labs nor the names of its
+ *     contributors may be used to endorse or promote products derived from
+ *     this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ *  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ *  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ *  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ *  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ *  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *  POSSIBILITY OF SUCH DAMAGE.
+ *
  */
  
 #include "phd.h"
@@ -61,10 +99,10 @@ GuiderMultiStar2::~GuiderMultiStar2() { }
  
 wxString GuiderMultiStar2::GetSettingsSummary() const
 {
-    // Keep classic summary, but tag the implementation for log visibility.
+    // Keep multistar summary, but tag the implementation for log visibility.
     wxString s = GuiderMultiStar::GetSettingsSummary();
     if (!s.empty())
-        s = "MultiStar2 (experimental): " + s;
+        s = _("MultiStar2: ") + s;
     return s;
 }
 
@@ -92,7 +130,7 @@ const Star& GuiderMultiStar2::PrimaryStar() const
 
 wxString GuiderMultiStar2::GetStarCount() const
 {
-    // Phase C: show contributing / max concurrent contributing this session.
+    // Show contributing / max concurrently contributing stars since (re)select.
     return wxString::Format("%u/%u", m_solutionStarsUsed, m_maxConcurrentStarsUsed);
 }
 
@@ -113,7 +151,6 @@ void GuiderMultiStar2::InvalidateCurrentPosition(bool fullReset)
 
 bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset *ofs, FrameDroppedInfo *errorInfo)
 {
-    // Phase C:
     // Compute the guiding offset from per-star displacements relative to each star's reference point.
     // This preserves continuity (no systematic step) when stars are lost or re-acquired.
 
@@ -148,7 +185,7 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     const PHD_Point& lockPos = LockPosition();
     bool raOnly = MyFrame::GuidingRAOnly();
 
-    // Mass-change normalization (match classic behavior: normalize by exposure when auto-exposure is enabled)
+    // Mass-change normalization (match multistar behavior: normalize by exposure when auto-exposure is enabled)
     int exposureMs = 0;
     bool isAutoExp = false;
     pFrame->GetExposureInfo(&exposureMs, &isAutoExp);
@@ -164,7 +201,7 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
 
         // Keep a simple time window, similar spirit to MassChecker
         wxLongLong_t now = ::wxGetUTCTimeMillis().GetValue();
-        wxLongLong_t oldest = now - 22500 * 2; // DefaultTimeWindowMs * 2 in classic
+        wxLongLong_t oldest = now - 22500 * 2; // DefaultTimeWindowMs * 2 in multistar
 
         while (!st.massHist.empty() && st.massHist.front().first < oldest)
             st.massHist.pop_front();
@@ -467,7 +504,7 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     m_solutionStar.HFD = m_displayStar.HFD;
     m_solutionStar.PeakVal = m_displayStar.PeakVal;
 
-    // Compute offsets vs lock position (as in classic)
+    // Compute offsets vs lock position (as in multistar)
     if (lockPos.IsValid())
     {
         ofs->cameraOfs = m_solutionStar - lockPos;
@@ -504,11 +541,11 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
         if (PaintHelper(dc, memDC))
             return;
 
-        // Phase C overlays:
+        // Overlays:
         // - circles around contributing stars (green)
         // - circles around lost stars (orange dotted)
         // - box around aggregate solution point
-        // - status text bottom-right: "Multi-stars: X/Y"
+        // - status text bottom-right: "Multistars: X/Y"
         // - "multistar2" tag top-right when selected
 
         EnsureStarStateSize();
@@ -562,7 +599,7 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
 
             dc.DrawRectangle(left, top, side, side);
 
-            // Phase C UI: distinguish multistar2 by adding 45-degree corner ticks.
+            // UI: distinguish multistar2 by adding 45-degree corner ticks.
             // Make each tick as long as the side of the square.
             int tickLen = wxMax(1, side);
             int d = wxMax(1, (int) ROUND((double) tickLen / sqrt(2.0)));
@@ -582,7 +619,7 @@ void GuiderMultiStar2::OnPaint(wxPaintEvent& event)
         // Status text: only when multistar2 is active and a star is selected
         if (GetState() >= STATE_SELECTED && m_multiStarMode)
         {
-            wxString msg = wxString::Format("Multi-stars: %u/%u", m_solutionStarsUsed, m_maxConcurrentStarsUsed);
+            wxString msg = wxString::Format(_("Multistars: %u/%u"), m_solutionStarsUsed, m_maxConcurrentStarsUsed);
             wxSize tsz = dc.GetTextExtent(msg);
             int x = XWinSize - tsz.GetWidth() - 5;
             int y = YWinSize - tsz.GetHeight() - 5;

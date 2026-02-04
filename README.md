@@ -15,9 +15,9 @@ PHD2’s built-in help file is an excellent way to get started using the program
 ## Features of this fork
 
 - **Multi-guider plumbing**: This fork adds infrastructure to support selecting between multiple guider implementations at runtime (via Advanced Settings) without destabilizing the rest of the app. The intent is to make it easier to develop, test, and compare alternative guider strategies in parallel with the existing guider(s).
-- **Experimental `multistar2` guider**: This fork adds `GuiderMultiStar2`, an opt-in experimental multi-star guiding implementation designed to avoid classic multi-star’s “primary star” single-point-of-failure and to preserve guiding solution continuity as stars are lost/reacquired. It also adds UI overlays and status text so users can see contributing vs lost stars and confirm they’re running the experimental implementation.
+- **Experimental `multistar2` guider**: This fork adds `GuiderMultiStar2`, an opt-in experimental multi-star guiding implementation designed to avoid multistar’s “primary star” single-point-of-failure and to preserve guiding solution continuity as stars are lost/reacquired. It also adds UI overlays and status text so users can see contributing vs lost stars and confirm they’re running the experimental implementation.
   - **To enable the new multistar2**, open the Guide/Advanced Settings menu, then select the Guiding tab, then select the "Use multiple stars" radio button and finally "Experimental (multistar2)" from the dropdown menu. 
-  - **Classic multi-star overview**: [`multistar_description.md`](multistar_description.md)
+  - **Multistar overview**: [`multistar_description.md`](multistar_description.md)
   - **Multistar2 overview**: [`multistar2_description.md`](multistar2_description.md)
   - **Development phases (A/B/C)**: [`multistar2_development_phases.md`](multistar2_development_phases.md)
 
