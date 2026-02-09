@@ -4,6 +4,15 @@ This file summarizes **testing performed to date** for the experimental `multist
 
 ---
 
+## Bottom-line verdict (current evidence)
+
+- **Primary-loss failover in real guiding data is supported (for 2026-02-07):** the solution continues with `used>0` even when `primaryContrib==0`.
+- **Continuity at membership changes is supported (for 2026-02-07):** GuideLog step-size statistics at membership-change frames are close to non-change frame statistics after filtering known outliers.
+- **Nuisance StarLost behavior appears improved in strong sessions:** 2026-02-07/08 showed zero DROP frames, while 2026-02-05 had a small DROP fraction likely influenced by star quality/HFD constraints.
+- **What remains:** repeat the same DebugLog↔GuideLog analysis across additional nights/conditions, plus intentionally forced loss scenarios.
+
+---
+
 ## Test environment (from logs)
 
 - **PHD2 build**: `2.6.13dev8-multistar2` (Windows)
@@ -54,7 +63,7 @@ Per-run behavior (dx/dy RMS in pixels, computed from GuideLog):
 
 ---
 
-### 2) Debug-log based multistar2 assessment (February 2026)
+### 2) Debug-log-based multistar2 assessment (February 2026)
 
 This section uses `PHD2_DebugLog_...` files to evaluate multistar2’s goals that are not visible in GuideLog alone (notably: whether guiding continues when the *original primary star* stops contributing, and whether membership changes cause systematic steps).
 
@@ -111,7 +120,7 @@ Results (pixel scale 2.55 arc-sec/px):
 
 ---
 
-### 2) Initial on-sky shakedown (January 2026)
+### 3) Initial on-sky shakedown (January 2026)
 
 Based on project notes and artifacts:
 - At least one on-sky test session occurred under poor seeing, during which:
@@ -125,8 +134,8 @@ Based on project notes and artifacts:
 
 ## What we have *not* yet validated (or needs more data)
 
-- **Primary-loss failover (end-to-end across multiple sessions)**: for 2026-02-07 we completed DebugLog↔GuideLog correlation and found comparable stability during `primaryContrib==0` vs `primaryContrib==1`. What remains is repeating this analysis on additional nights/conditions.
-- **Quantitative continuity metric (GuideLog-based, across multiple sessions)**: we computed GuideLog \(\Delta(dx,dy)\) step distributions at DebugLog membership-change timestamps for 2026-02-07. What remains is repeating this analysis on additional nights/conditions.
+- **Primary-loss failover (end-to-end across multiple sessions)**: for 2026-02-07, DebugLog↔GuideLog correlation shows comparable stability during `primaryContrib==0` vs `primaryContrib==1`. What remains is repeating this analysis on additional nights/conditions.
+- **Quantitative continuity metric (GuideLog-based, across multiple sessions)**: for 2026-02-07, we computed GuideLog \(\Delta(dx,dy)\) step distributions at DebugLog membership-change timestamps. What remains is repeating this analysis on additional nights/conditions.
 - **Behavior under intentionally forced star loss**: e.g., partial occlusions / clouds / deliberate ROI/subframe constraints.
 
 ---
