@@ -54,6 +54,32 @@ Per-run behavior (dx/dy RMS in pixels, computed from GuideLog):
 
 ---
 
+### 2) Debug-log based multistar2 assessment (February 2026)
+
+This section uses `PHD2_DebugLog_...` files to evaluate multistar2’s goals that are not visible in GuideLog alone (notably: whether guiding continues when the *original primary star* stops contributing, and whether membership changes cause systematic steps).
+
+#### 2026-02-07 (DebugLog `PHD2_DebugLog_2026-02-07_173156.txt`)
+
+The debug log includes multistar2 internal lines of the form:
+- `MultiStar2: pool=... found=... used=... primaryContrib=... added=[...] removed=[...] disp=(...) dDisp=(...) ...`
+
+**Highlights**
+- **Primary not required for continuity**: `primaryContrib==0` occurred on **6080/13068 (46.53%)** of multistar2 solution lines, and **every one** of those lines still had `used>0` (i.e., the aggregate solution continued using non-primary stars).
+- **Reacquire gating exercised**: `MultiStar2: reacquire idx=...` appeared **4047** times, showing that lost/reacquired-star handling was frequently triggered in real data.
+- **Membership-change step sizes (from `dDisp`)**:
+  - Across **6714** membership-change events (`added` or `removed` non-empty), and excluding obvious outliers (`|dDisp| > 10 px`):
+    - median \(|dDisp|\) ≈ **0.524 px**
+    - p90 \(|dDisp|\) ≈ **1.294 px**
+    - p99 \(|dDisp|\) ≈ **2.819 px**
+    - max (non-outlier) \(|dDisp|\) ≈ **6.358 px**
+- **Large outliers correlate with mount-limited behavior**: there were **12** membership-change events with \(|dDisp| > 10 px\), with the largest coinciding with the reported mount safety-stop segment near the meridian.
+
+#### 2026-02-09 (DebugLog `PHD2_DebugLog_2026-02-09_153233.txt`)
+
+- This debug log contains startup + shutdown only (no guiding run), and therefore contains **no** multistar2 solution/membership lines (`MultiStar2: pool=...`).
+
+---
+
 ### 2) Initial on-sky shakedown (January 2026)
 
 Based on project notes and artifacts:
