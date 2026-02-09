@@ -67,8 +67,6 @@ Multistar mass-change handling is primary-centric. Multistar2 applies a mass-cha
 
 Multistar2 only produces a lost-star condition when **no stars are available**. Losing an individual star does not cause StarLost.
 
-This directly supports the “continue guiding unless all guide stars are lost” requirement.
-
 ### 7) UI overlays
 
 Multistar2 provides additional visual cues in the guider image panel:
