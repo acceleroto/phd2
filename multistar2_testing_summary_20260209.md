@@ -74,6 +74,37 @@ The debug log includes multistar2 internal lines of the form:
     - max (non-outlier) \(|dDisp|\) ≈ **6.358 px**
 - **Large outliers correlate with mount-limited behavior**: there were **12** membership-change events with \(|dDisp| > 10 px\), with the largest coinciding with the reported mount safety-stop segment near the meridian.
 
+**End-to-end correlation (DebugLog ↔ GuideLog)**
+
+Using the same session’s GuideLog `dx/dy` and aligning DebugLog multistar2 lines to the nearest GuideLog `Mount` sample (±2s), and excluding mount-limited/outlier segments (\(|dx|,|dy|\le 10\) px and \(|dDisp|\le 10\) px):
+
+- **Stability during primary dropouts (`primaryContrib==0`, used>0)**:
+  - N=6060 aligned samples
+  - \(r=\sqrt{dx^2+dy^2}\) median ≈ **0.394 px**, RMS ≈ **0.697 px**, p99 ≈ **2.742 px**
+- **Stability when primary contributes (`primaryContrib==1`, used>0)**:
+  - N=6980 aligned samples
+  - \(r\) median ≈ **0.430 px**, RMS ≈ **0.724 px**, p99 ≈ **2.487 px**
+- **Primary↔non-primary transition behavior**:
+  - 1330 filtered primary-toggle events
+  - per-frame `dx/dy` jump at toggle instants: median ≈ **0.480 px**, p99 ≈ **3.847 px**, max ≈ **8.188 px**
+
+**Quantitative continuity metric (GuideLog-based, at membership changes)**
+
+Using DebugLog membership-change events (`added`/`removed`) aligned to the nearest GuideLog `Mount` frame (±2s), and excluding:
+- settling intervals
+- a short post-dither window (5 frames)
+- mount-limited/outlier segments (\(|dx|,|dy|\le 10\) px and \(|dDisp|\le 10\) px)
+- cross-run boundaries (large time gaps)
+
+Define per-frame continuity step:
+\[
+\Delta = \sqrt{(\Delta dx)^2 + (\Delta dy)^2}
+\]
+
+Results (pixel scale 2.55 arc-sec/px):
+- **At membership-change frames** (N=6156): median \(\Delta\) ≈ **0.488 px** (≈ **1.244 arcsec**), p90 ≈ **1.175 px** (≈ **2.996 arcsec**), p99 ≈ **2.438 px** (≈ **6.217 arcsec**), RMS ≈ **0.788 px** (≈ **2.009 arcsec**), max ≈ **6.358 px** (≈ **16.214 arcsec**)
+- **At non-change frames** (N=11247): median \(\Delta\) ≈ **0.476 px** (≈ **1.213 arcsec**), p90 ≈ **1.111 px** (≈ **2.833 arcsec**), p99 ≈ **2.241 px** (≈ **5.714 arcsec**), RMS ≈ **0.736 px** (≈ **1.878 arcsec**), max ≈ **5.648 px** (≈ **14.403 arcsec**)
+
 #### 2026-02-09 (DebugLog `PHD2_DebugLog_2026-02-09_153233.txt`)
 
 - This debug log contains startup + shutdown only (no guiding run), and therefore contains **no** multistar2 solution/membership lines (`MultiStar2: pool=...`).
@@ -94,10 +125,8 @@ Based on project notes and artifacts:
 
 ## What we have *not* yet validated (or needs more data)
 
-- **Primary-loss failover evidence**: to prove “no single point of failure,” we need to correlate:
-  - multistar2 contributing-set changes (debug log `MultiStar2:` membership-change lines)
-  - guide error continuity (GuideLog dx/dy) at those same timestamps
-- **Quantitative continuity metric**: step size \(\Delta(dx,dy)\) distribution at membership changes, excluding dithers/settling.
+- **Primary-loss failover (end-to-end across multiple sessions)**: for 2026-02-07 we completed DebugLog↔GuideLog correlation and found comparable stability during `primaryContrib==0` vs `primaryContrib==1`. What remains is repeating this analysis on additional nights/conditions.
+- **Quantitative continuity metric (GuideLog-based, across multiple sessions)**: we computed GuideLog \(\Delta(dx,dy)\) step distributions at DebugLog membership-change timestamps for 2026-02-07. What remains is repeating this analysis on additional nights/conditions.
 - **Behavior under intentionally forced star loss**: e.g., partial occlusions / clouds / deliberate ROI/subframe constraints.
 
 ---
@@ -110,8 +139,6 @@ Based on project notes and artifacts:
 
 ## Next recommended tests (high value)
 
-- Collect matching **DebugLog** files for the sessions and compute:
-  - membership-change timeline
-  - continuity metrics at each star loss/reacquire
+- Repeat the GuideLog continuity analysis on additional sessions, and keep an explicit filter/annotation for known mount-limited segments (e.g., meridian safety stop) so they don’t dominate continuity statistics.
 - Repeat on a night with average/better seeing and capture a longer continuous run with multiple natural star drop/reacquire events.
 
