@@ -1,74 +1,59 @@
-# Multistar2 pre-PR notes (strict review)
+# Multistar2 pre-PR notes (strict review, refreshed)
 
-### Verdict (strict)
-**As-is, `multistar2` would probably *not* be accepted as a PR by a mature open-source team**—not because the idea is bad, but because it currently reads like a fork/experimental branch: inconsistent file headers/licensing, inconsistent “project style” conventions, and some integration/behavior mismatches with existing guider expectations.
+This is an updated strict review based on the **current state** of the branch, including recent comment/doc cleanup and GuideLog+DebugLog testing analysis.
 
-That said: **as an opt-in experimental feature, it’s plausibly PR-able** *after* a cleanup pass that makes it look like it belongs in PHD2 (style, logging, compatibility knobs, and documentation accuracy).
+## Current verdict
+`multistar2` is now much closer to reviewable than before.  
+As an **opt-in experimental PR**, it looks plausible for upstream consideration, but it still has a few likely review blockers and several expected “please tighten this” comments.
 
----
+## Status of earlier blockers
 
-### Coding style: `guider_multistar` vs `guider_multistar2`
+- **Resolved**
+  - Full BSD-style license headers are now present in `src/guider_multistar2.h` and `src/guider_multistar2.cpp`.
+  - Phase-specific comments in code were removed/reworded to behavior-based comments.
+  - Most terminology cleanup is done (`multistar` vs `classic` wording improved in docs/comments).
+  - Runtime implementation selection and safe guider recreation plumbing remain solid.
+  - Key user-visible strings discussed earlier are now wrapped for translation in code (e.g., `_("Multistars: %u/%u")`, `_("MultiStar2: ")`).
+  - Testing evidence has improved significantly (including DebugLog↔GuideLog correlation for 2026-02-07).
 
-- **File header / licensing (major red flag)**
-  - `guider_multistar.{h,cpp}` has the full project BSD header block.
-  - `guider_multistar2.{h,cpp}` currently does not; it’s a short comment header.
-  - Open-source maintainers are often strict here.
+- **Still open (likely PR feedback)**
+  - **Header self-sufficiency**: `src/guider_multistar2.h` uses `std::deque`, `std::vector`, and `std::pair` but does not include standard headers directly (relies on transitive includes).
+  - **Debug macro default**: `MULTISTAR2_DEBUG_LOG` defaults to `1` in the header; this is likely too noisy/surprising for upstream defaults.
+  - **Behavioral guardrail parity**: `multistar2` still does not mirror some existing multistar protections (notably distance/jump recovery behavior like `DistanceChecker` in `GuiderMultiStar`).
+  - **Instrumentation parity**: logging format/depth is still different from multistar’s established support/debug patterns.
+  - **Top-right overlay tag**: `"multistar2"` draw tag remains in `OnPaint()` and is plain text (not translated). If this tag is intended to stay, it should be justified and internationalized; if not, remove it.
+  - **gettext artifacts**: code is translation-ready, but `locale/messages.pot` / `locale/*/messages.po` updates still depend on running extraction/merge targets when wording is finalized.
 
-- **Header self-sufficiency (likely review comment)**
-  - `guider_multistar2.h` uses `std::deque`, `std::vector`, `std::pair` but doesn’t include the needed standard headers (it relies on transitive includes).
-  - In a large team, this is usually treated as a correctness/maintainability issue.
+## Implementation-style assessment (current)
 
-- **Debug macro defaults (very likely rejection in review)**
-  - The comment says “Enable by adding `-D...=1`”, but the code defaults it to **1**.
-  - That means **debug logging is on by default** unless someone explicitly disables it—surprising for “extra debug logging”, and the kind of thing maintainers push back on hard.
+- **Architecture**
+  - `GuiderMultiStar2` is intentionally not a small refactor; it introduces an aggregate solution model (with separate display star) and membership-aware behavior. This is acceptable for an experimental path, but reviewers will treat it as a substantial algorithm fork.
 
-- **Comment accuracy (trust issue)**
-  - Both `guider_multistar2.h/.cpp` claim “Phase A: scaffold only. Behavior matches classic”, but the implementation is clearly beyond a scaffold (full alternate solution-point logic, reacquire gating, per-star mass checks, new overlays, changed semantics). This mismatch will trigger “what else is misdescribed?” scrutiny.
+- **Risk areas maintainers will focus on**
+  - Correctness under mount/pathological conditions (e.g., meridian safety-stop segments) and how gracefully the guider handles them.
+  - Behavior compatibility with existing configuration knobs (`TolerateJumps`, recovery behavior expectations, image logging semantics).
+  - Long-term maintainability of duplicated logic (`StarStatus2`, per-star mass-window logic vs existing `MassChecker` model).
 
-- **Project idioms**
-  - `guider_multistar.cpp` uses the project’s common pattern of try/catch with `ERROR_INFO/THROW_INFO`, consistent `Debug.Write(...)` usage, and existing helper/stat structs.
-  - `guider_multistar2.cpp` is more “modern C++” (lambdas, local structs, vectors), which isn’t inherently bad—but it stands out vs surrounding code and will prompt maintainers to ask for consistency or justification.
+## Testing confidence (current)
 
----
+- **Positive**
+  - Feb 7 session correlation supports primary-loss failover goal:
+    - `primaryContrib==0` with `used>0` across many frames
+    - similar GuideLog stability metrics during primary-contributing and primary-not-contributing intervals
+  - GuideLog-based continuity-at-membership-change metric has now been computed (filtered) and is reasonably close to non-change baseline.
 
-### Implementation style (behavioral + architectural differences)
+- **Caveats**
+  - Strong results are from a limited number of sessions and seeing conditions.
+  - One session includes mount safety-stop behavior; correctly treated as external, but still a stress case worth explicit guardrails.
+  - Need replication across additional nights / forced-loss scenarios.
 
-- **Scope and coupling**
-  - `GuiderMultiStar` is primary-star-centric and uses a *secondary refinement* step (`RefineOffset`) under specific conditions.
-  - `GuiderMultiStar2` replaces the core model with an **aggregate “solution star”** and a separate **display star**. That’s a big conceptual change, not a refactor.
+## Would upstream accept this as a PR now?
 
-- **Compatibility with existing guider behaviors (big risk area)**
-  - Multistar integrates:
-    - mass-change handling via `MassChecker`
-    - distance/jump tolerance via `DistanceChecker`
-    - consistent image logging, error reporting, and auto-exposure reset behavior
-  - `multistar2` implements new per-star mass rejection and reacquire gating (good idea), but **does not mirror several existing guardrails** (e.g., the distance/jump recovery logic). Maintainers will likely ask: “Are we dropping existing knobs/behavior for users without realizing it?”
+Probably **yes as an experimental/opt-in draft PR**, with expected review iterations.  
+Probably **not as merge-ready on first pass** until the open items above are addressed, especially:
 
-- **Instrumentation/logging parity**
-  - `GuiderMultiStar` logs consistently (including successful frames, failure reasons).
-  - `GuiderMultiStar2` logs deselect/lost cases, but doesn’t appear to provide the same depth/format consistency on success frames. In PHD2, logging consistency is a big deal for support.
-
-- **UI/paint handling**
-  - The implementation correctly accounts for wxWidgets event-table behavior and works around it by binding paint in the constructor. This is pragmatic, but it *will* raise eyebrows because it’s a wx-specific “gotcha”. Expect a maintainer to ask for a comment (there is one) and possibly a more centralized solution.
-
-- **Settings plumbing quality (this part is actually pretty good)**
-  - Opt-in selection is persisted in profile (`/guider/multistar/implementation`) and switching triggers a safe recreate after the dialog closes. This is the kind of “team-friendly” glue code open-source maintainers like.
-
----
-
-### Would an open-source team be ok with it as a PR?
-**Not in its current form.** The two biggest “team” blockers are:
-
-- **Process/maintenance blockers**
-  - missing/incorrect license headers on new source files
-  - non-self-contained headers
-  - debug logging enabled by default
-  - inaccurate “Phase A / matches classic” claims
-
-- **Technical review blockers**
-  - behavioral divergence vs multistar without clearly preserving existing guider safeguards (distance/jump tolerance, logging parity, etc.)
-  - substantial code duplication (e.g., `StarStatus2`, mass-check logic) without a clear reuse strategy
-  - user-visible behavior changes (star count semantics, overlays, untranslated strings in overlays)
-
-If those are addressed—and the PR is presented explicitly as **experimental, opt-in, low-risk, with clear compatibility constraints and a test/log validation plan**—then **yes, a team could accept it**, but they’d almost certainly request iterations before merge.
+- debug logging default behavior
+- header include hygiene
+- clarity on mount/pathological recovery guardrails
+- final i18n artifact update (`messages.pot` / `messages.po`) once wording is frozen
 
