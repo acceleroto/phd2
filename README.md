@@ -42,7 +42,10 @@ PHD2’s built-in help file is an excellent way to get started using the program
 - **MnMo reset risk on first launch**: This build uses a newer Visual C++ runtime than stock PHD2. In some setups, existing MnMo values can be cleared and replaced with large defaults (for example `5.0` / `20.0`).  
   **Before guiding, verify and re-enter both MnMo values manually** if needed.
 - **Recalibrate before first autoguiding session**: Run a fresh calibration the first time you use this beta on your setup, then begin guiding.
+- **Quick verify before guiding**: Start looping exposures and confirm your expected profile/settings are loaded (especially MnMo) before enabling guiding.
 
+### Download link
+- ([http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip](http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip))
 ## License
 
 See [`LICENSE.txt`](LICENSE.txt).
