@@ -33,7 +33,7 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 ## Installing and running this fork
 
-- **Required dependency**: Install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). ([Microsoft Redistributable Downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version))
+- **Required dependency**: Install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). [Microsoft Redistributable Downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version)
 - **Run**: Unzip the build folder and double-click `phd2.exe`.
 
 ### Important: beta pre-flight checklist
@@ -45,7 +45,7 @@ PHD2’s built-in help file is an excellent way to get started using the program
 - **Quick verify before guiding**: Start looping exposures and confirm your expected profile/settings are loaded (especially MnMo) before enabling guiding.
 
 ### Download link
-- ([http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip]http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip)
+- ([http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip](http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip))
 ## License
 
 See [`LICENSE.txt`](LICENSE.txt).
