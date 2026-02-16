@@ -35,6 +35,7 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 - **Required dependency**: Install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). [Microsoft Redistributable Downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version)
 - **Run**: Unzip the build folder and double-click `phd2.exe`.
+- For NINA users, change the Equipment/Guider/PHD2/gear-icon PHD2 Path setting to point to this phd2.exe then connect your guider in NINA as you normally would.
 
 ### Important: beta pre-flight checklist
 
