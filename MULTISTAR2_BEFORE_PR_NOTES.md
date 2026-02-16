@@ -10,6 +10,13 @@ As an **opt-in experimental PR**, it looks plausible for upstream consideration,
 
 - **Resolved**
   - Full BSD-style license headers are now present in `src/guider_multistar2.h` and `src/guider_multistar2.cpp`.
+  - Header self-sufficiency is fixed for `src/guider_multistar2.h` by adding direct STL includes for used types (`<deque>`, `<utility>`, `<vector>`).
+  - Behavioral guardrail parity work has been implemented in `src/guider_multistar2.cpp`:
+    - aggregate distance/jump recovery gate (`DistanceChecker2`-style flow)
+    - explicit reject/recover path for zero contributing stars
+    - failure-path auto-exposure reset behavior
+    - success-path image distance logging
+  - Local validation passed for this change set: builds cleanly, loops images, and no crashes seen in daytime camera-connected smoke testing.
   - Phase-specific comments in code were removed/reworded to behavior-based comments.
   - Most terminology cleanup is done (`multistar` vs `classic` wording improved in docs/comments).
   - Runtime implementation selection and safe guider recreation plumbing remain solid.
@@ -17,9 +24,8 @@ As an **opt-in experimental PR**, it looks plausible for upstream consideration,
   - Testing evidence has improved significantly (including DebugLog↔GuideLog correlation for 2026-02-07).
 
 - **Still open (likely PR feedback)**
-  - **Header self-sufficiency**: `src/guider_multistar2.h` uses `std::deque`, `std::vector`, and `std::pair` but does not include standard headers directly (relies on transitive includes).
   - **Debug macro default**: `MULTISTAR2_DEBUG_LOG` defaults to `1` in the header; this is likely too noisy/surprising for upstream defaults.
-  - **Behavioral guardrail parity**: `multistar2` still does not mirror some existing multistar protections (notably distance/jump recovery behavior like `DistanceChecker` in `GuiderMultiStar`).
+  - **Behavioral guardrail parity (validation pending)**: parity mechanisms are now implemented, but we still need on-sky guiding validation to confirm real-world tuning/behavior under normal and disturbed mount conditions.
   - **Instrumentation parity**: logging format/depth is still different from multistar’s established support/debug patterns.
   - **Top-right overlay tag**: `"multistar2"` draw tag remains in `OnPaint()` and is plain text (not translated). If this tag is intended to stay, it should be justified and internationalized; if not, remove it.
   - **gettext artifacts**: code is translation-ready, but `locale/messages.pot` / `locale/*/messages.po` updates still depend on running extraction/merge targets when wording is finalized.
@@ -53,7 +59,6 @@ Probably **yes as an experimental/opt-in draft PR**, with expected review iterat
 Probably **not as merge-ready on first pass** until the open items above are addressed, especially:
 
 - debug logging default behavior
-- header include hygiene
-- clarity on mount/pathological recovery guardrails
+- on-sky validation of new guardrail behavior/tuning
 - final i18n artifact update (`messages.pot` / `messages.po`) once wording is frozen
 

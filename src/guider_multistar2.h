@@ -49,6 +49,9 @@
 #define GUIDER_MULTISTAR2_H_INCLUDED
  
 #include "guider_multistar.h"
+#include <deque>
+#include <utility>
+#include <vector>
  
 // Compile-time switch for extra multistar2 logging.
 // Enable by adding -DMULTISTAR2_DEBUG_LOG=1 to your build.

@@ -88,6 +88,113 @@ static wxString StarStatus2(const Star& star)
     return status;
 }
 
+struct DistanceChecker2
+{
+    enum State
+    {
+        ST_GUIDING,
+        ST_WAITING,
+        ST_RECOVERING,
+    };
+    State m_state;
+    wxLongLong_t m_expires;
+    double m_forceTolerance;
+
+    enum
+    {
+        WAIT_INTERVAL_MS = 5000
+    };
+
+    DistanceChecker2() : m_state(ST_GUIDING), m_forceTolerance(0.) { }
+
+    void Activate()
+    {
+        if (m_state == ST_GUIDING)
+        {
+            Debug.Write("DistanceChecker2: activated\n");
+            m_state = ST_WAITING;
+            m_expires = ::wxGetUTCTimeMillis().GetValue() + WAIT_INTERVAL_MS;
+            m_forceTolerance = 2.0;
+        }
+    }
+
+    static bool _CheckDistance(double distance, bool raOnly, double tolerance)
+    {
+        enum
+        {
+            MIN_FRAMES_FOR_STATS = 10
+        };
+        Guider *guider = pFrame->pGuider;
+        if (!guider->IsGuiding() || guider->IsPaused() || PhdController::IsSettling() ||
+            guider->CurrentErrorFrameCount() < MIN_FRAMES_FOR_STATS)
+        {
+            return true;
+        }
+        double avgDist = guider->CurrentErrorSmoothed(raOnly);
+        double threshold = tolerance * avgDist;
+        if (distance > threshold)
+        {
+            Debug.Write(wxString::Format("DistanceChecker2: reject for large offset (%.2f > %.2f) avgDist = %.2f count = %u\n",
+                                         distance, threshold, avgDist, guider->CurrentErrorFrameCount()));
+            return false;
+        }
+        return true;
+    }
+
+    bool CheckDistance(double distance, bool raOnly, double tolerance)
+    {
+        if (m_forceTolerance != 0.)
+            tolerance = m_forceTolerance;
+
+        bool small_offset = _CheckDistance(distance, raOnly, tolerance);
+
+        switch (m_state)
+        {
+        default:
+        case ST_GUIDING:
+            if (small_offset)
+                return true;
+
+            Debug.Write("DistanceChecker2: activated\n");
+            m_state = ST_WAITING;
+            m_expires = ::wxGetUTCTimeMillis().GetValue() + WAIT_INTERVAL_MS;
+            return false;
+
+        case ST_WAITING:
+        {
+            if (small_offset)
+            {
+                Debug.Write("DistanceChecker2: deactivated\n");
+                m_state = ST_GUIDING;
+                m_forceTolerance = 0.;
+                return true;
+            }
+            // large distance
+            wxLongLong_t now = ::wxGetUTCTimeMillis().GetValue();
+            if (now < m_expires)
+            {
+                // reject frame
+                return false;
+            }
+            // timed-out
+            Debug.Write("DistanceChecker2: begin recovering\n");
+            m_state = ST_RECOVERING;
+            // fall through
+        }
+
+        case ST_RECOVERING:
+            if (small_offset)
+            {
+                Debug.Write("DistanceChecker2: deactivated\n");
+                m_state = ST_GUIDING;
+            }
+            return true;
+        }
+    }
+};
+
+static DistanceChecker2 s_distanceChecker2;
+
 GuiderMultiStar2::GuiderMultiStar2(wxWindow *parent) : GuiderMultiStar(parent)
 {
     // Ensure our override is actually used for paint events. GuiderMultiStar registers its own
@@ -320,7 +427,9 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         errorInfo->starSNR = 0.0;
         errorInfo->starHFD = 0.0;
         errorInfo->status = _("Star lost");
+        s_distanceChecker2.Activate();
         ImageLogger::LogImage(pImage, *errorInfo);
+        pFrame->ResetAutoExposure(); // use max exposure duration while no usable stars are available
         return true;
     }
 
@@ -392,6 +501,31 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
             best = &f - &found[0];
     }
 
+    unsigned int contributing = 0;
+    for (const auto& st : m_starState)
+        if (st.contributingThisFrame)
+            contributing++;
+    if (contributing == 0)
+    {
+        size_t bestFound = 0;
+        for (size_t i = 1; i < found.size(); i++)
+            if (found[i].star.SNR > found[bestFound].star.SNR)
+                bestFound = i;
+        m_displayStar = found[bestFound].star;
+
+        errorInfo->starError = Star::STAR_ERROR;
+        errorInfo->starMass = m_displayStar.Mass;
+        errorInfo->starSNR = m_displayStar.SNR;
+        errorInfo->starHFD = m_displayStar.HFD;
+        errorInfo->status = _("Recovering");
+        pFrame->StatusMsg(_("Recovering"));
+
+        s_distanceChecker2.Activate();
+        ImageLogger::LogImage(pImage, *errorInfo);
+        pFrame->ResetAutoExposure(); // use max exposure duration while recovering from unusable contributors
+        return true;
+    }
+
     PHD_Point disp = baseDisp;
     if (sumW > 0.0)
         disp.SetXY(sumDX / sumW, sumDY / sumW);
@@ -405,10 +539,6 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     m_solutionStar.SetError(Star::STAR_OK);
 
     // Contributing count and session max
-    unsigned int contributing = 0;
-    for (const auto& st : m_starState)
-        if (st.contributingThisFrame)
-            contributing++;
     m_solutionStarsUsed = contributing;
     if (contributing > m_maxConcurrentStarsUsed)
         m_maxConcurrentStarsUsed = contributing;
@@ -505,6 +635,8 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     m_solutionStar.PeakVal = m_displayStar.PeakVal;
 
     // Compute offsets vs lock position (as in multistar)
+    double distance = 0.;
+    double distanceRA = 0.;
     if (lockPos.IsValid())
     {
         ofs->cameraOfs = m_solutionStar - lockPos;
@@ -512,10 +644,27 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         if (pMount && pMount->IsCalibrated())
             pMount->TransformCameraCoordinatesToMountCoordinates(ofs->cameraOfs, ofs->mountOfs, true);
 
-        double distance = raOnly ? fabs(m_solutionStar.X - lockPos.X) : m_solutionStar.Distance(lockPos);
-        double distanceRA = ofs->mountOfs.IsValid() ? fabs(ofs->mountOfs.X) : 0.;
-        UpdateCurrentDistance(distance, distanceRA);
+        distance = raOnly ? fabs(m_solutionStar.X - lockPos.X) : m_solutionStar.Distance(lockPos);
+        distanceRA = ofs->mountOfs.IsValid() ? fabs(ofs->mountOfs.X) : 0.;
     }
+
+    double tolerance = m_tolerateJumpsEnabled ? m_tolerateJumpsThreshold : 9e99;
+    if (!s_distanceChecker2.CheckDistance(distance, raOnly, tolerance))
+    {
+        errorInfo->starError = Star::STAR_ERROR;
+        errorInfo->starMass = m_displayStar.Mass;
+        errorInfo->starSNR = m_displayStar.SNR;
+        errorInfo->starHFD = m_displayStar.HFD;
+        errorInfo->status = _("Recovering");
+        pFrame->StatusMsg(_("Recovering"));
+
+        ImageLogger::LogImage(pImage, *errorInfo);
+        pFrame->ResetAutoExposure(); // use max exposure duration while recovering from large offsets
+        return true;
+    }
+
+    ImageLogger::LogImage(pImage, distance);
+    UpdateCurrentDistance(distance, distanceRA);
 
     // Use a real star location for profile display.
     pFrame->pProfile->UpdateData(pImage, m_displayStar.X, m_displayStar.Y);
