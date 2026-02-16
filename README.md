@@ -46,7 +46,7 @@ PHD2’s built-in help file is an excellent way to get started using the program
 - **Quick verify before guiding**: Start looping exposures and confirm your expected profile/settings are loaded (especially MnMo) before enabling guiding.
 
 ### Download link
-- [astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip](http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip)
+- Windows phd2-multistar2 zipped folder: [astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip](http://astronomynightly.com/share/multistar2/phd2-multistar2-beta2.zip)
 ## License
 
 See [`LICENSE.txt`](LICENSE.txt).
