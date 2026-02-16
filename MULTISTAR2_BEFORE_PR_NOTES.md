@@ -16,6 +16,11 @@ As an **opt-in experimental PR**, it looks plausible for upstream consideration,
     - explicit reject/recover path for zero contributing stars
     - failure-path auto-exposure reset behavior
     - success-path image distance logging
+  - Instrumentation parity work has been implemented in `src/guider_multistar2.cpp`:
+    - structured per-frame `MultiStar2: frame ...` summary logs
+    - structured `MultiStar2: reject ...` breakdown logs for non-OK paths
+    - structured `MultiStar2: recovery ...` transition logs (activate/timeout/deactivate)
+    - existing membership/reacquire logs retained and aligned with new structured fields
   - Local validation passed for this change set: builds cleanly, loops images, and no crashes seen in daytime camera-connected smoke testing.
   - Phase-specific comments in code were removed/reworded to behavior-based comments.
   - Most terminology cleanup is done (`multistar` vs `classic` wording improved in docs/comments).
@@ -26,7 +31,7 @@ As an **opt-in experimental PR**, it looks plausible for upstream consideration,
 - **Still open (likely PR feedback)**
   - **Debug macro default**: `MULTISTAR2_DEBUG_LOG` defaults to `1` in the header; this is likely too noisy/surprising for upstream defaults.
   - **Behavioral guardrail parity (validation pending)**: parity mechanisms are now implemented, but we still need on-sky guiding validation to confirm real-world tuning/behavior under normal and disturbed mount conditions.
-  - **Instrumentation parity**: logging format/depth is still different from multistar’s established support/debug patterns.
+  - **Instrumentation parity (validation pending)**: structured instrumentation is implemented, but we still need on-sky autoguiding runs to confirm signal quality/noise and supportability under real conditions.
   - **Top-right overlay tag**: `"multistar2"` draw tag remains in `OnPaint()` and is plain text (not translated). If this tag is intended to stay, it should be justified and internationalized; if not, remove it.
   - **gettext artifacts**: code is translation-ready, but `locale/messages.pot` / `locale/*/messages.po` updates still depend on running extraction/merge targets when wording is finalized.
 
@@ -59,6 +64,10 @@ Probably **yes as an experimental/opt-in draft PR**, with expected review iterat
 Probably **not as merge-ready on first pass** until the open items above are addressed, especially:
 
 - debug logging default behavior
-- on-sky validation of new guardrail behavior/tuning
+- on-sky validation of new guardrail and instrumentation behavior/tuning
 - final i18n artifact update (`messages.pot` / `messages.po`) once wording is frozen
+
+## Follow-up reminder after next night test
+
+- Re-check **behavioral guardrail parity** and **instrumentation parity** status after on-telescope autoguiding data is collected (GuideLog + DebugLog), then promote from “validation pending” if results are clean.
 

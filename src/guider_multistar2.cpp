@@ -107,6 +107,23 @@ struct DistanceChecker2
 
     DistanceChecker2() : m_state(ST_GUIDING), m_forceTolerance(0.) { }
 
+    static wxString StateName(State st)
+    {
+        switch (st)
+        {
+        case ST_GUIDING:
+            return "guiding";
+        case ST_WAITING:
+            return "waiting";
+        case ST_RECOVERING:
+            return "recovering";
+        default:
+            return "unknown";
+        }
+    }
+
+    State CurrentState() const { return m_state; }
+
     void Activate()
     {
         if (m_state == ST_GUIDING)
@@ -115,16 +132,22 @@ struct DistanceChecker2
             m_state = ST_WAITING;
             m_expires = ::wxGetUTCTimeMillis().GetValue() + WAIT_INTERVAL_MS;
             m_forceTolerance = 2.0;
+            MS2LOGF("MultiStar2: recovery state=%s event=activate tolerance=%.3f avgDist=nan threshold=nan dist=nan\n",
+                    StateName(m_state), m_forceTolerance);
         }
     }
 
-    static bool _CheckDistance(double distance, bool raOnly, double tolerance)
+    static bool _CheckDistance(double distance, bool raOnly, double tolerance, double *avgDistOut, double *thresholdOut,
+                               bool *statsValidOut)
     {
         enum
         {
             MIN_FRAMES_FOR_STATS = 10
         };
         Guider *guider = pFrame->pGuider;
+        *avgDistOut = 0.;
+        *thresholdOut = 0.;
+        *statsValidOut = false;
         if (!guider->IsGuiding() || guider->IsPaused() || PhdController::IsSettling() ||
             guider->CurrentErrorFrameCount() < MIN_FRAMES_FOR_STATS)
         {
@@ -132,6 +155,9 @@ struct DistanceChecker2
         }
         double avgDist = guider->CurrentErrorSmoothed(raOnly);
         double threshold = tolerance * avgDist;
+        *avgDistOut = avgDist;
+        *thresholdOut = threshold;
+        *statsValidOut = true;
         if (distance > threshold)
         {
             Debug.Write(wxString::Format("DistanceChecker2: reject for large offset (%.2f > %.2f) avgDist = %.2f count = %u\n",
@@ -146,7 +172,12 @@ struct DistanceChecker2
         if (m_forceTolerance != 0.)
             tolerance = m_forceTolerance;
 
-        bool small_offset = _CheckDistance(distance, raOnly, tolerance);
+        double avgDist = 0.;
+        double threshold = 0.;
+        bool statsValid = false;
+        bool small_offset = _CheckDistance(distance, raOnly, tolerance, &avgDist, &threshold, &statsValid);
+        wxString avgDistStr = statsValid ? wxString::Format("%.3f", avgDist) : wxString("nan");
+        wxString thresholdStr = statsValid ? wxString::Format("%.3f", threshold) : wxString("nan");
 
         switch (m_state)
         {
@@ -158,6 +189,8 @@ struct DistanceChecker2
             Debug.Write("DistanceChecker2: activated\n");
             m_state = ST_WAITING;
             m_expires = ::wxGetUTCTimeMillis().GetValue() + WAIT_INTERVAL_MS;
+            MS2LOGF("MultiStar2: recovery state=%s event=activate tolerance=%.3f avgDist=%s threshold=%s dist=%.3f\n",
+                    StateName(m_state), tolerance, avgDistStr, thresholdStr, distance);
             return false;
 
         case ST_WAITING:
@@ -167,6 +200,8 @@ struct DistanceChecker2
                 Debug.Write("DistanceChecker2: deactivated\n");
                 m_state = ST_GUIDING;
                 m_forceTolerance = 0.;
+                MS2LOGF("MultiStar2: recovery state=%s event=deactivate tolerance=%.3f avgDist=%s threshold=%s dist=%.3f\n",
+                        StateName(m_state), tolerance, avgDistStr, thresholdStr, distance);
                 return true;
             }
             // large distance
@@ -179,6 +214,8 @@ struct DistanceChecker2
             // timed-out
             Debug.Write("DistanceChecker2: begin recovering\n");
             m_state = ST_RECOVERING;
+            MS2LOGF("MultiStar2: recovery state=%s event=timeout tolerance=%.3f avgDist=%s threshold=%s dist=%.3f\n",
+                    StateName(m_state), tolerance, avgDistStr, thresholdStr, distance);
             // fall through
         }
 
@@ -187,6 +224,8 @@ struct DistanceChecker2
             {
                 Debug.Write("DistanceChecker2: deactivated\n");
                 m_state = ST_GUIDING;
+                MS2LOGF("MultiStar2: recovery state=%s event=deactivate tolerance=%.3f avgDist=%s threshold=%s dist=%.3f\n",
+                        StateName(m_state), tolerance, avgDistStr, thresholdStr, distance);
             }
             return true;
         }
@@ -262,6 +301,35 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     // This preserves continuity (no systematic step) when stars are lost or re-acquired.
 
     static const unsigned int REACQUIRE_GOOD_FRAMES = 3;
+    const unsigned int poolSize = (unsigned int) m_guideStars.size();
+    unsigned int rejectNotFound = 0;
+    unsigned int rejectMass = 0;
+    unsigned int rejectReacquireGate = 0;
+
+    auto JoinUnsigned = [](const std::vector<unsigned int>& vals) -> wxString {
+        wxString s;
+        for (size_t i = 0; i < vals.size(); i++)
+            s += wxString::Format("%s%u", i ? "," : "", vals[i]);
+        return s;
+    };
+    auto EmitFrameSummary = [&](const wxString& outcome, const wxString& reason, unsigned int foundCount, unsigned int usedCount,
+                                bool primaryContrib, double distance, const PHD_Point& disp, const PHD_Point& dDisp,
+                                bool jumpRejected, const wxString& usedIdxStr, const wxString& addedStr,
+                                const wxString& removedStr) {
+        MS2LOGF("MultiStar2: frame outcome=%s reason=%s pool=%u found=%u used=%u primaryContrib=%d "
+                "dist=%.3f disp=(%.3f,%.3f) dDisp=(%.3f,%.3f) notFound=%u mass=%u reacquireGate=%u jump=%d "
+                "usedIdx=[%s] added=[%s] removed=[%s]\n",
+                outcome, reason, poolSize, foundCount, usedCount, primaryContrib ? 1 : 0, distance, disp.X, disp.Y, dDisp.X,
+                dDisp.Y, rejectNotFound, rejectMass, rejectReacquireGate, jumpRejected ? 1 : 0, usedIdxStr, addedStr,
+                removedStr);
+    };
+    auto EmitRejectBreakdown = [&](const wxString& reason, unsigned int foundCount, unsigned int usedCount, bool jumpRejected,
+                                   const wxString& usedIdxStr, const wxString& addedStr, const wxString& removedStr) {
+        MS2LOGF("MultiStar2: reject reason=%s pool=%u found=%u used=%u notFound=%u mass=%u reacquireGate=%u jump=%d "
+                "usedIdx=[%s] added=[%s] removed=[%s]\n",
+                reason, poolSize, foundCount, usedCount, rejectNotFound, rejectMass, rejectReacquireGate,
+                jumpRejected ? 1 : 0, usedIdxStr, addedStr, removedStr);
+    };
 
     const Star prevSolution(m_solutionStar);
     const PHD_Point prevDisp = (prevSolution.WasFound() && LockPosition().IsValid()) ? (prevSolution - LockPosition())
@@ -286,6 +354,9 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         errorInfo->starHFD = 0.0;
         errorInfo->status = _("No star selected");
         ImageLogger::LogImageStarDeselected(pImage);
+        EmitFrameSummary("drop", "no_star_selected", 0, 0, false, 0.0, PHD_Point(0.0, 0.0), PHD_Point(0.0, 0.0), false, "", "",
+                         "");
+        EmitRejectBreakdown("no_star_selected", 0, 0, false, "", "", "");
         return true;
     }
 
@@ -391,6 +462,7 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         {
             gs.wasLost = true;
             st.reacquireGoodCount = 0;
+            rejectNotFound++;
             continue;
         }
 
@@ -412,8 +484,12 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
 
         // mass-change rejection (per star)
         bool reject = massReject(st, s.Mass);
+        if (reject)
+            rejectMass++;
 
         bool gatedIn = st.reacquireGoodCount >= REACQUIRE_GOOD_FRAMES;
+        if (!gatedIn)
+            rejectReacquireGate++;
         bool eligible = gatedIn && !reject;
 
         // Mark as "found but not contributing yet" if gated/rejected
@@ -430,6 +506,9 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         s_distanceChecker2.Activate();
         ImageLogger::LogImage(pImage, *errorInfo);
         pFrame->ResetAutoExposure(); // use max exposure duration while no usable stars are available
+        EmitFrameSummary("drop", "all_lost", (unsigned int) found.size(), 0, false, 0.0, prevDisp, PHD_Point(0.0, 0.0), false,
+                         "", "", "");
+        EmitRejectBreakdown("all_lost", (unsigned int) found.size(), 0, false, "", "", "");
         return true;
     }
 
@@ -502,9 +581,14 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     }
 
     unsigned int contributing = 0;
-    for (const auto& st : m_starState)
-        if (st.contributingThisFrame)
+    std::vector<unsigned int> usedIdx;
+    usedIdx.reserve(poolSize);
+    for (unsigned int i = 0; i < (unsigned int) m_starState.size(); i++)
+        if (m_starState[i].contributingThisFrame)
+        {
             contributing++;
+            usedIdx.push_back(i);
+        }
     if (contributing == 0)
     {
         size_t bestFound = 0;
@@ -523,6 +607,9 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         s_distanceChecker2.Activate();
         ImageLogger::LogImage(pImage, *errorInfo);
         pFrame->ResetAutoExposure(); // use max exposure duration while recovering from unusable contributors
+        EmitFrameSummary("recovering", "no_contributors", (unsigned int) found.size(), contributing, false, 0.0, prevDisp,
+                         PHD_Point(0.0, 0.0), false, "", "", "");
+        EmitRejectBreakdown("no_contributors", (unsigned int) found.size(), contributing, false, "", "", "");
         return true;
     }
 
@@ -543,10 +630,10 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     if (contributing > m_maxConcurrentStarsUsed)
         m_maxConcurrentStarsUsed = contributing;
 
+    wxString addedStr;
+    wxString removedStr;
 #if MULTISTAR2_DEBUG_LOG
-    // Log only when the contributing membership changes, so it stays readable.
     {
-        const unsigned int poolSize = (unsigned int) m_guideStars.size();
         const unsigned int foundCount = (unsigned int) found.size(); // found (may include gated/rejected)
         const unsigned int usedCount = m_solutionStarsUsed; // eligible + used this frame
         const bool primaryContrib = !m_starState.empty() && m_starState[0].contributingThisFrame;
@@ -562,24 +649,24 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
             m_dbgLastContribMask.assign(poolSize, false);
         }
 
-        if (m_dbgLastContribMask.size() != poolSize)
-            m_dbgLastContribMask.assign(poolSize, false);
-
         std::vector<unsigned int> added;
         std::vector<unsigned int> removed;
         added.reserve(poolSize);
         removed.reserve(poolSize);
-
+        if (m_dbgLastContribMask.size() != poolSize)
+            m_dbgLastContribMask.assign(poolSize, false);
         for (unsigned int i = 0; i < poolSize; i++)
         {
-            const bool now = m_starState[i].contributingThisFrame;
-            const bool was = m_dbgLastContribMask[i];
+            bool now = m_starState[i].contributingThisFrame;
+            bool was = m_dbgLastContribMask[i];
             if (now != was)
             {
                 (now ? added : removed).push_back(i);
                 m_dbgLastContribMask[i] = now;
             }
         }
+        addedStr = JoinUnsigned(added);
+        removedStr = JoinUnsigned(removed);
 
         const bool anyMembershipChange = !added.empty() || !removed.empty();
         const bool anySummaryChange = (poolSize != m_dbgLastPoolSize) || (foundCount != m_dbgLastFoundCount) ||
@@ -588,19 +675,6 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         if (anyMembershipChange || anySummaryChange)
         {
             const PHD_Point dDisp = disp - m_dbgLastDisp;
-
-            wxString addedStr, removedStr;
-            if (!added.empty())
-            {
-                for (size_t j = 0; j < added.size(); j++)
-                    addedStr += wxString::Format("%s%u", j ? "," : "", added[j]);
-            }
-            if (!removed.empty())
-            {
-                for (size_t j = 0; j < removed.size(); j++)
-                    removedStr += wxString::Format("%s%u", j ? "," : "", removed[j]);
-            }
-
             const PHD_Point& lockPosForLog = LockPosition();
             MS2LOGF("MultiStar2: pool=%u found=%u used=%u primaryContrib=%d added=[%s] removed=[%s] "
                     "disp=(%.3f,%.3f) dDisp=(%.3f,%.3f) lock=(%.3f,%.3f) sol=(%.3f,%.3f)\n",
@@ -660,6 +734,12 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
 
         ImageLogger::LogImage(pImage, *errorInfo);
         pFrame->ResetAutoExposure(); // use max exposure duration while recovering from large offsets
+        bool primaryContrib = !m_starState.empty() && m_starState[0].contributingThisFrame;
+        PHD_Point dDisp = disp - prevDisp;
+        wxString usedIdxStr = JoinUnsigned(usedIdx);
+        EmitFrameSummary("recovering", "jump_reject", (unsigned int) found.size(), contributing, primaryContrib, distance, disp,
+                         dDisp, true, usedIdxStr, addedStr, removedStr);
+        EmitRejectBreakdown("jump_reject", (unsigned int) found.size(), contributing, true, usedIdxStr, addedStr, removedStr);
         return true;
     }
 
@@ -676,6 +756,14 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     errorInfo->starSNR = m_displayStar.SNR;
     errorInfo->starHFD = m_displayStar.HFD;
     errorInfo->status = StarStatus2(m_displayStar);
+
+    {
+        bool primaryContrib = !m_starState.empty() && m_starState[0].contributingThisFrame;
+        PHD_Point dDisp = disp - prevDisp;
+        wxString usedIdxStr = JoinUnsigned(usedIdx);
+        EmitFrameSummary("ok", "none", (unsigned int) found.size(), contributing, primaryContrib, distance, disp, dDisp, false,
+                         usedIdxStr, addedStr, removedStr);
+    }
 
     return false;
 }
