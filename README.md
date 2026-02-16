@@ -36,6 +36,13 @@ PHD2’s built-in help file is an excellent way to get started using the program
 - **Required dependency**: Install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). ([Microsoft Redistributable Downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version))
 - **Run**: Unzip the build folder and double-click `phd2.exe`.
 
+### Important: beta pre-flight checklist
+
+- **Take screenshots before first run**: Save screenshots of your **Advanced Settings** pages and your guiding algorithm settings (especially both **Min Move (MnMo)** values) before launching this beta.
+- **MnMo reset risk on first launch**: This build uses a newer Visual C++ runtime than stock PHD2. In some setups, existing MnMo values can be cleared and replaced with large defaults (for example `5.0` / `20.0`).  
+  **Before guiding, verify and re-enter both MnMo values manually** if needed.
+- **Recalibrate before first autoguiding session**: Run a fresh calibration the first time you use this beta on your setup, then begin guiding.
+
 ## License
 
 See [`LICENSE.txt`](LICENSE.txt).
