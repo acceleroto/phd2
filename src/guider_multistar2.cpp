@@ -252,6 +252,22 @@ wxString GuiderMultiStar2::GetSettingsSummary() const
     return s;
 }
 
+void GuiderMultiStar2::SetDroppedFrameInfo(const usImage *pImage, FrameDroppedInfo *errorInfo, const wxString& status, double mass,
+                                           double snr, double hfd, bool setStatusMsg, bool resetAutoExposure) const
+{
+    errorInfo->starError = Star::STAR_ERROR;
+    errorInfo->starMass = mass;
+    errorInfo->starSNR = snr;
+    errorInfo->starHFD = hfd;
+    errorInfo->status = status;
+    if (setStatusMsg)
+        pFrame->StatusMsg(status);
+
+    ImageLogger::LogImage(pImage, *errorInfo);
+    if (resetAutoExposure)
+        pFrame->ResetAutoExposure();
+}
+
 void GuiderMultiStar2::EnsureStarStateSize()
 {
     if (m_starState.size() != m_guideStars.size())
@@ -498,14 +514,9 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
 
     if (found.empty())
     {
-        errorInfo->starError = Star::STAR_ERROR;
-        errorInfo->starMass = 0.0;
-        errorInfo->starSNR = 0.0;
-        errorInfo->starHFD = 0.0;
-        errorInfo->status = _("Star lost");
+        SetDroppedFrameInfo(pImage, errorInfo, _("Star lost"), 0.0, 0.0, 0.0, false, true);
         s_distanceChecker2.Activate();
-        ImageLogger::LogImage(pImage, *errorInfo);
-        pFrame->ResetAutoExposure(); // use max exposure duration while no usable stars are available
+        // Use max exposure duration while no usable stars are available.
         EmitFrameSummary("drop", "all_lost", (unsigned int) found.size(), 0, false, 0.0, prevDisp, PHD_Point(0.0, 0.0), false,
                          "", "", "");
         EmitRejectBreakdown("all_lost", (unsigned int) found.size(), 0, false, "", "", "");
@@ -597,16 +608,10 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
                 bestFound = i;
         m_displayStar = found[bestFound].star;
 
-        errorInfo->starError = Star::STAR_ERROR;
-        errorInfo->starMass = m_displayStar.Mass;
-        errorInfo->starSNR = m_displayStar.SNR;
-        errorInfo->starHFD = m_displayStar.HFD;
-        errorInfo->status = _("Recovering");
-        pFrame->StatusMsg(_("Recovering"));
-
+        SetDroppedFrameInfo(pImage, errorInfo, _("Recovering"), m_displayStar.Mass, m_displayStar.SNR, m_displayStar.HFD, true,
+                            true);
         s_distanceChecker2.Activate();
-        ImageLogger::LogImage(pImage, *errorInfo);
-        pFrame->ResetAutoExposure(); // use max exposure duration while recovering from unusable contributors
+        // Use max exposure duration while recovering from unusable contributors.
         EmitFrameSummary("recovering", "no_contributors", (unsigned int) found.size(), contributing, false, 0.0, prevDisp,
                          PHD_Point(0.0, 0.0), false, "", "", "");
         EmitRejectBreakdown("no_contributors", (unsigned int) found.size(), contributing, false, "", "", "");
@@ -725,15 +730,9 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     double tolerance = m_tolerateJumpsEnabled ? m_tolerateJumpsThreshold : 9e99;
     if (!s_distanceChecker2.CheckDistance(distance, raOnly, tolerance))
     {
-        errorInfo->starError = Star::STAR_ERROR;
-        errorInfo->starMass = m_displayStar.Mass;
-        errorInfo->starSNR = m_displayStar.SNR;
-        errorInfo->starHFD = m_displayStar.HFD;
-        errorInfo->status = _("Recovering");
-        pFrame->StatusMsg(_("Recovering"));
-
-        ImageLogger::LogImage(pImage, *errorInfo);
-        pFrame->ResetAutoExposure(); // use max exposure duration while recovering from large offsets
+        SetDroppedFrameInfo(pImage, errorInfo, _("Recovering"), m_displayStar.Mass, m_displayStar.SNR, m_displayStar.HFD, true,
+                            true);
+        // Use max exposure duration while recovering from large offsets.
         bool primaryContrib = !m_starState.empty() && m_starState[0].contributingThisFrame;
         PHD_Point dDisp = disp - prevDisp;
         wxString usedIdxStr = JoinUnsigned(usedIdx);

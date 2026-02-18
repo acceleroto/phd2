@@ -80,6 +80,8 @@ public:
 private:
     void InvalidateCurrentPosition(bool fullReset = false) override;
     bool UpdateCurrentPosition(const usImage *pImage, GuiderOffset *ofs, FrameDroppedInfo *errorInfo) override;
+    void SetDroppedFrameInfo(const usImage *pImage, FrameDroppedInfo *errorInfo, const wxString& status, double mass,
+                             double snr, double hfd, bool setStatusMsg, bool resetAutoExposure) const;
 
     struct StarState
     {
