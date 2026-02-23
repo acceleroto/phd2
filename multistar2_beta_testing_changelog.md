@@ -1,6 +1,6 @@
 # Multistar2 Beta Testing Changelog
 
-## Beta 3 - TBD
+## Beta 3 - 2026-02-22
 
 - Refactored dropped/recovering frame handling in `multistar2` to remove duplicated logic.
   - Added a shared helper (`SetDroppedFrameInfo`) to centralize `errorInfo` population, recovery status messaging, image logging, and optional auto-exposure reset.
