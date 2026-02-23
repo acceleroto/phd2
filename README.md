@@ -48,7 +48,5 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 ## License
 
-phd2-v2.6.13dev8-multistar3-beta3-installer.exe
-
 See [`LICENSE.txt`](LICENSE.txt).
 
