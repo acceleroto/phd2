@@ -33,8 +33,8 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 ## Installing and running this fork
 
-- **Run**: Download `phd2-v2.6.13dev8-multistar3-beta3-installer.exe` from [Releases](https://github.com/acceleroto/phd2/releases) and run it.
-- **Required dependency**: If you see errors related to missing dll files, you may need to install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). [Microsoft Redistributable Downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version)
+- Download `phd2-v2.6.13dev8-multistar3-beta3-installer.exe` from [Releases](https://github.com/acceleroto/phd2/releases) and run it.
+- **Required dependency**: You should not see any errors related to missing dll files, but if you do you may need to install the latest Microsoft Visual C++ Redistributable for Visual Studio (x64). [Microsoft Redistributable Downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#latest-supported-redistributable-version)
 - For NINA users, change the Equipment/Guider/PHD2/gear-icon PHD2 Path setting to point to this phd2.exe then connect your guider in NINA as you normally would.
 
 ### Important: beta pre-flight checklist
