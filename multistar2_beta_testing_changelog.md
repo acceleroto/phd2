@@ -8,6 +8,7 @@
 - Updated Windows runtime packaging for newer Visual C++ builds.
   - Added `vcruntime140_1.dll` to the Windows copy list in `thirdparty/thirdparty.cmake`.
   - Added `vcruntime140_1.dll` to both installer manifests (`phd2-x64.iss.in` and `phd2-x86.iss.in`) for runtime parity.
+- Beta distribution process update: beta builds are now delivered using the Windows installer package.
 
 ## Beta 2 - 2026-02-16
 
