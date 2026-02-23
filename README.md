@@ -2,10 +2,6 @@
 
 PHD2 is the enhanced, second generation version of the popular PHD guiding software from Stark Labs. PHD2 is free and open source, and development is community-driven.
 
-## Getting started
-
-PHD2’s built-in help file is an excellent way to get started using the program, regardless of whether you’ve had previous experience with the original PHD.
-
 ## Links
 
 - **Project website / news**: [openphdguiding.org](https://openphdguiding.org/)
