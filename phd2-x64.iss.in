@@ -57,6 +57,7 @@ Source: ..\build\dark_mover.vbs; DestDir: {tmp}; Flags: replacesameversion
 Source: Release\msvcp140.dll; DestDir: {app}; Flags: replacesameversion
 Source: Release\vcomp140.dll; DestDir: {app}; Flags: replacesameversion
 Source: Release\vcruntime140.dll; DestDir: {app}; Flags: replacesameversion
+Source: Release\vcruntime140_1.dll; DestDir: {app}; Flags: replacesameversion
 Source: Release\concrt140.dll; DestDir: {app}; Flags: replacesameversion
 Source: Release\cfitsio.dll; DestDir: {app}; Flags: replacesameversion
 Source: Release\jpeg62.dll; DestDir: {app}; Flags: replacesameversion

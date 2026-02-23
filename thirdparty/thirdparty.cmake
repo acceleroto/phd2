@@ -866,6 +866,7 @@ if(WIN32)
     ${PHD_PROJECT_ROOT_DIR}/WinLibs/${WINDOWS_ARCH}/msvcp140.dll
     ${PHD_PROJECT_ROOT_DIR}/WinLibs/${WINDOWS_ARCH}/vcomp140.dll
     ${PHD_PROJECT_ROOT_DIR}/WinLibs/${WINDOWS_ARCH}/vcruntime140.dll
+    ${PHD_PROJECT_ROOT_DIR}/WinLibs/${WINDOWS_ARCH}/vcruntime140_1.dll
     ${PHD_PROJECT_ROOT_DIR}/WinLibs/${WINDOWS_ARCH}/concrt140.dll
   )
 
