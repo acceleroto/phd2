@@ -23,12 +23,13 @@ PHD2’s built-in help file is an excellent way to get started using the program
 
 ## Fork status
 
-- Windows 32-bit version is built.
+- Windows version only for now. Beta 3 installer works.
 - First night of initial testing: One crash and several small bugs were fixed.
 - Lost/gained-star solution appears to be working well with no jumps or drifts in the target aiming.
 - Added some debug logging for easier testing analysis.
 - First night was very poor seeing. During decent seeing periods, autoguiding RMS looked good.
 - Two additional nights of testing were completed, both still wtih poor seeing.
+- During 3rd night of testing, found an edge cases were the solution was jumping between two points. Guiderail improvements in Beta 2 should fix this.
 - Ready for additional testing. Wanted: an average or better seeing night.
 
 ## Installing and running this fork
