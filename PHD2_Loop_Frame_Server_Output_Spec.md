@@ -5,7 +5,7 @@
 This document is the handoff/spec for a new `PHD2` fork and a separate Cursor
 project/chat whose goal is to extend the `PHD2` server interface so
 looping-but-not-guiding operation can expose live mount-axis drift data that is
-usable by `PECWizard`.
+usable by future downstream tools.
 
 It includes:
 
@@ -21,36 +21,17 @@ having to reconstruct the prior reasoning.
 
 ## Project Context
 
-`PECWizard` is a Windows-first astronomical desktop application that measures
-mount periodic error from `PHD2` centroid drift plus `ASCOM` mount state and
-eventually generates/writes a PEC curve.
+The intended downstream use case is future tooling that needs live mount-axis
+drift while `PHD2` is looping exposures with a selected star but guiding is
+off.
 
-Current app stack:
-
-- `Avalonia`
-- `C#`
-- `.NET 8`
-
-For capture, `PECWizard` requires:
-
-- `PHD2` reachable
-- camera connected in `PHD2`
-- mount connected in `PHD2`
-- guiding `OFF`
-- mount tracking `ON`
-
-That requirement is deliberate. `PECWizard` does not want guide corrections
-mixed into the PE measurement.
-
-Relevant existing PECWizard docs:
-
-- `external_interfaces_mvp.md`
-- `PECWizard_data_acquisition_workflow.md`
+That operating mode is important for tools that need to observe raw drift
+without guide corrections mixed into the measurement stream.
 
 ## Why This Fork Is Needed
 
-`PECWizard` currently plots and records live RA/Dec error using the `PHD2`
-`GuideStep` event.
+A downstream client can currently consume live RA/Dec-like error using the
+`PHD2` `GuideStep` event.
 
 That works while guiding is active because `GuideStep` contains:
 
@@ -64,12 +45,12 @@ However, `GuideStep` is only emitted while guiding is active.
 When guiding is off but exposures are still looping and a star is selected:
 
 - `PHD2` app state can be `Looping` or `Selected`
-- the graph in `PECWizard` becomes empty
+- the downstream client's graph/data stream becomes empty
 - no unguided RA/Dec drift samples are available through the current server
   event stream
 
 So the present integration is correct for guiding mode, but wrong/incomplete
-for PEC capture mode.
+for non-guiding drift-capture workflows.
 
 ## What We Verified
 
@@ -92,7 +73,7 @@ Observed payload construction:
 ### 2. `LoopingExposures` exists but does not include offsets
 
 `LoopingExposures` is emitted during looping, but it only gives cadence/frame
-state and not the guide-star drift values needed by `PECWizard`.
+state and not the guide-star drift values needed by downstream tooling.
 
 ### 3. `get_star_image` is not sufficient
 
@@ -168,11 +149,11 @@ It is a server-output/API-surface gap.
 
 ## Product Requirement For The New Output
 
-The new `PHD2` server output must allow a client such as `PECWizard` to:
+The new `PHD2` server output must allow a downstream client to:
 
 - receive live sample updates while guiding is `OFF`
 - use those samples for live plotting
-- use those samples for PEC capture/recording
+- use those samples for drift capture/recording
 - avoid relying on private/internal `PHD2` implementation assumptions
 
 It must do this without changing the behavior of existing guiding clients that
@@ -214,7 +195,7 @@ Reason:
 
 - clearly tied to loop frames
 - not ambiguous with guiding
-- generic enough for wider use than `PECWizard`
+- generic enough for wider tool development use
 
 ## Event Emission Conditions
 
@@ -348,7 +329,7 @@ That means:
 
 - clients can reason about unguided and guided drift in the same coordinate
   space
-- `PECWizard` can switch sources with minimal normalization differences
+- downstream tools can switch sources with minimal normalization differences
 
 ## Non-Goals
 
@@ -454,7 +435,8 @@ system and signs should be consistent.
 This should be framed as:
 
 - an additive event-server enhancement
-- useful for PEC measurement, diagnostics, and other non-guiding tooling
+- useful for future tool development, diagnostics, and other non-guiding
+  tooling
 - intentionally non-breaking for current guiding clients
 
 It should **not** be framed as:

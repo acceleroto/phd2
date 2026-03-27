@@ -11,7 +11,7 @@ and guiding is off.
 Today, `PHD2` server clients can get mount-axis drift values from `GuideStep`,
 but that event is guiding-only.
 
-For tools like `PECWizard`, the required operating mode is:
+For future tool development, the relevant operating mode is:
 
 - looping exposures
 - star selected
