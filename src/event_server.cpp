@@ -2804,6 +2804,26 @@ void EventServer::NotifyLooping(unsigned int exposure, const Star *star, const F
     do_notify(m_eventServerClients, ev);
 }
 
+void EventServer::NotifyLoopFrameOffset(unsigned int frameNumber, const GuiderOffset& ofs, const PHD_Point& starPos,
+                                        const PHD_Point& lockPos)
+{
+    if (m_eventServerClients.empty())
+        return;
+
+    Ev ev("LoopFrameOffset");
+    bool calibrated = ofs.mountOfs.IsValid();
+
+    ev << NV("Frame", frameNumber) << NV("dx", ofs.cameraOfs.X, 3) << NV("dy", ofs.cameraOfs.Y, 3)
+       << NV("StarPosition", starPos) << NV("LockPosition", lockPos) << NV("Calibrated", calibrated);
+
+    if (calibrated)
+    {
+        ev << NV("RADistanceRaw", ofs.mountOfs.X, 3) << NV("DECDistanceRaw", ofs.mountOfs.Y, 3);
+    }
+
+    do_notify(m_eventServerClients, ev);
+}
+
 void EventServer::NotifyLoopingStopped()
 {
     SIMPLE_NOTIFY("LoopingExposuresStopped");

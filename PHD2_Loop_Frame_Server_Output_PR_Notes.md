@@ -18,8 +18,8 @@ For future tool development, the relevant operating mode is:
 - guiding off
 
 In that mode, the current server event stream exposes state changes such as
-`LoopingExposures`, but not the selected-star drift values needed for live PE
-measurement.
+`LoopingExposures`, but not the selected-star drift values needed for live
+drift measurement.
 
 ## Requested Change
 
@@ -34,12 +34,20 @@ Suggested emission conditions:
 - loop frame acquired
 - valid selected star
 - valid lock position
-- guiding off
+- guide corrections not being applied
+- successful per-frame position update
+
+Paused-guiding behavior:
+
+- if looping exposures continue while guiding is paused, still emit the event
+- if exposures are fully paused, no new frame means no event
 
 Suggested payload:
 
 - `Frame`
 - `Timestamp`
+- `Host`
+- `Inst`
 - `dx`
 - `dy`
 - `RADistanceRaw`
@@ -96,6 +104,13 @@ This PR should:
 - preserve existing RPC behavior
 - only add new event-server functionality
 
+## First-Pass Scope
+
+This first pass should be:
+
+- `LoopFrameOffset` event only
+- no new RPCs yet
+
 ## Optional Follow-Up
 
 Also consider a small RPC:
@@ -129,9 +144,12 @@ current server API.
 ## Validation Suggestions
 
 1. Verify new event appears during looping with selected star and guiding off.
-2. Verify `GuideStep` behavior is unchanged during guiding.
-3. Verify event values move consistently with known star drift.
-4. Verify existing server clients are unaffected if they ignore unknown events.
+2. Verify uncalibrated operation still emits the event with `Calibrated: false`
+   and without `RADistanceRaw` / `DECDistanceRaw`.
+3. Verify paused-but-looping operation still emits the event.
+4. Verify `GuideStep` behavior is unchanged during guiding.
+5. Verify event values move consistently with known star drift.
+6. Verify existing server clients are unaffected if they ignore unknown events.
 
 ## One-Sentence PR Summary
 

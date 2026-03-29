@@ -179,7 +179,8 @@ The safe path is an additive extension:
 
 ## New Event
 
-Add a new event dedicated to selected-star loop frames while guiding is off.
+Add a new event dedicated to selected-star loop frames while guide
+corrections are not active.
 
 Recommended event name candidates:
 
@@ -203,22 +204,21 @@ Emit the new event when all of the following are true:
 
 - camera exposures are looping
 - a guide star is currently selected
-- guiding is not active
+- guide corrections are not being applied
 - the current star position is valid
 - the lock position is valid
-- calibration data is available for mount-axis transform
+- the current frame update succeeded
 
-If calibration is not available, either:
-
-- omit `RADistanceRaw` / `DECDistanceRaw` and include camera-space values only,
-  or
-- include a `calibrated: false` field and still emit a reduced payload
-
-Preferred behavior:
+If calibration is not available:
 
 - still emit the event with camera-space info
-- include `calibrated`
+- include `Calibrated: false`
 - include mount-axis fields only when valid
+
+Paused-guiding behavior:
+
+- if looping exposures continue while guiding is paused, still emit the event
+- if exposures are fully paused, no new frame means no event
 
 That gives clients more observability and avoids all-or-nothing behavior.
 
@@ -289,36 +289,15 @@ If uncalibrated:
 }
 ```
 
-## Optional RPC Addition
+## First-Pass Scope
 
-Also consider adding a new RPC:
+The first implementation should be event-only:
 
-- `get_current_star_position`
+- add `LoopFrameOffset`
+- do not add `get_current_star_position` yet
 
-Return:
-
-- full-frame current selected-star centroid position
-
-Why this is useful:
-
-- fills a gap in the current server API
-- makes the server more introspectable and complete
-- useful even outside the new event
-- allows alternative client polling strategies
-
-Suggested result:
-
-```json
-{"jsonrpc":"2.0","result":[642.381,511.927],"id":1}
-```
-
-If no star selected:
-
-- return `null` or a documented JSON-RPC error
-
-Preferred:
-
-- mirror existing style and return an error if no star is selected
+`get_current_star_position` remains a possible follow-up if a polling-oriented
+client use case appears later.
 
 ## Semantics Requirement
 
@@ -411,6 +390,11 @@ That reduces the chance that guiding and unguided semantics drift apart later.
 7. Confirm:
    - `dx`/`dy` change as the star drifts
    - `RADistanceRaw`/`DECDistanceRaw` also change when calibrated
+8. Clear calibration and confirm:
+   - the event still emits
+   - `Calibrated` is `false`
+   - `RADistanceRaw` / `DECDistanceRaw` are omitted
+9. Pause guiding while looping continues and confirm the event still emits
 
 ### Backward Compatibility Validation
 

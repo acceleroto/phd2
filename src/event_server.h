@@ -38,6 +38,8 @@
 #include <set>
 #include "json_parser.h"
 
+struct GuiderOffset;
+
 class EventServer : public wxEvtHandler
 {
 public:
@@ -61,6 +63,8 @@ public:
     void NotifyCalibrationComplete(const Mount *mount);
     void NotifyCalibrationDataFlipped(const Mount *mount);
     void NotifyLooping(unsigned int exposure, const Star *star, const FrameDroppedInfo *info);
+    void NotifyLoopFrameOffset(unsigned int frameNumber, const GuiderOffset& ofs, const PHD_Point& starPos,
+                               const PHD_Point& lockPos);
     void NotifyLoopingStopped();
     void NotifySingleFrameComplete(bool succeeded, const wxString& errorMsg, const SingleExposure& info);
     void NotifyStarSelected(const PHD_Point& pos);

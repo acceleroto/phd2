@@ -1369,6 +1369,11 @@ void Guider::UpdateGuideState(usImage *pImage, bool bStopping)
 
         statusMessage = info.status;
 
+        bool emitLoopFrameOffset = (IsLoopingState(m_state) || (IsPaused() && m_state == STATE_GUIDING)) &&
+            CurrentPosition().IsValid() && LockPosition().IsValid();
+        if (emitLoopFrameOffset)
+            EvtServer.NotifyLoopFrameOffset(pImage->FrameNum, ofs, CurrentPosition(), LockPosition());
+
         if (IsLoopingState(m_state))
             EvtServer.NotifyLooping(pImage->FrameNum, &PrimaryStar(), nullptr);
 
