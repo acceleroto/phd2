@@ -237,6 +237,9 @@ static DistanceChecker2 s_distanceChecker2;
 #if MULTISTAR2_JUMP_DIAGNOSTICS
 // TODO(multistar2-jump-diagnostics): TEMPORARY
 // Remove with the matching declarations and capture sites after the jump investigation.
+static const double JUMP_DIAG_THRESHOLD_ARCSEC = 5.0;
+static const double JUMP_DIAG_THRESHOLD_UNKNOWN_SCALE_PX = 2.0;
+
 void GuiderMultiStar2::JumpDiagReset()
 {
     m_jumpDiagLastAcceptedValid = false;
@@ -260,7 +263,8 @@ wxString GuiderMultiStar2::JumpDiagTriggerReason(const JumpDiagFrameSnapshot& sn
     if (snapshot.referenceRepinned)
         return "reference_repin";
 
-    const double threshold = snapshot.imageScaleKnown ? 2.0 / snapshot.imageScale : 1.0;
+    const double threshold =
+        snapshot.imageScaleKnown ? JUMP_DIAG_THRESHOLD_ARCSEC / snapshot.imageScale : JUMP_DIAG_THRESHOLD_UNKNOWN_SCALE_PX;
     const double returnTolerance = snapshot.imageScaleKnown ? 0.5 / snapshot.imageScale : 0.5;
     auto Distance = [](const PHD_Point& a, const PHD_Point& b) {
         const double dx = a.X - b.X;
@@ -604,7 +608,8 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         {
             const double dx = jumpDiag.candidate.X - jumpDiag.previousAccepted.X;
             const double dy = jumpDiag.candidate.Y - jumpDiag.previousAccepted.Y;
-            const double threshold = jumpDiag.imageScaleKnown ? 2.0 / jumpDiag.imageScale : 1.0;
+            const double threshold = jumpDiag.imageScaleKnown ? JUMP_DIAG_THRESHOLD_ARCSEC / jumpDiag.imageScale
+                                                              : JUMP_DIAG_THRESHOLD_UNKNOWN_SCALE_PX;
             jumpDiag.largeCandidateJump = sqrt(dx * dx + dy * dy) > threshold;
             if (jumpDiag.largeCandidateJump)
                 m_jumpDiagLargeCandidateTimes.push_back(jumpDiag.timestampMs);
