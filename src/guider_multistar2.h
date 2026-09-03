@@ -59,6 +59,21 @@
 #define MULTISTAR2_DEBUG_LOG 1
 #endif
 
+// TODO(multistar2-jump-diagnostics): TEMPORARY
+// Removal checklist: remove this flag, all similarly tagged state/helpers, and
+// the corresponding capture/episode logging in guider_multistar2.cpp.
+#ifndef MULTISTAR2_JUMP_DIAGNOSTICS
+#if MULTISTAR2_DEBUG_LOG
+#define MULTISTAR2_JUMP_DIAGNOSTICS 1
+#else
+#define MULTISTAR2_JUMP_DIAGNOSTICS 0
+#endif
+#endif
+#if !MULTISTAR2_DEBUG_LOG && MULTISTAR2_JUMP_DIAGNOSTICS
+#undef MULTISTAR2_JUMP_DIAGNOSTICS
+#define MULTISTAR2_JUMP_DIAGNOSTICS 0
+#endif
+
 // Experimental multistar guider. Implements an aggregate "solution" star position
 // derived from multiple guide stars, allowing guiding continuity as stars are lost/reacquired.
 class GuiderMultiStar2 : public GuiderMultiStar
@@ -98,6 +113,95 @@ private:
     };
 
     void EnsureStarStateSize();
+
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    struct JumpDiagStarSnapshot
+    {
+        unsigned int index = 0;
+        bool expectedValid = false;
+        PHD_Point expected;
+        bool found = false;
+        PHD_Point measured;
+        bool referenceValid = false;
+        PHD_Point reference;
+        PHD_Point displacement;
+        double snr = 0.;
+        double mass = 0.;
+        double adjustedMass = 0.;
+        double massMedian = 0.;
+        double massLowBound = 0.;
+        double massHighBound = 0.;
+        double massSpikeBound = 0.;
+        bool massBoundsValid = false;
+        bool massRejected = false;
+        unsigned int reacquireGoodCount = 0;
+        wxString eligibilityReason;
+        bool contributing = false;
+        double weight = 0.;
+        bool repinned = false;
+        PHD_Point oldReference;
+        PHD_Point newReference;
+        PHD_Point prePinDisplacement;
+    };
+
+    struct JumpDiagFrameSnapshot
+    {
+        unsigned int frameNumber = 0;
+        wxLongLong_t timestampMs = 0;
+        double guidingTime = 0.;
+        int guiderState = 0;
+        bool guiding = false;
+        bool paused = false;
+        bool settling = false;
+        bool lockValid = false;
+        PHD_Point lockPosition;
+        double imageScale = 1.;
+        bool imageScaleKnown = false;
+        bool previousAcceptedValid = false;
+        PHD_Point previousAccepted;
+        bool candidateValid = false;
+        PHD_Point candidate;
+        bool displayedValid = false;
+        PHD_Point displayed;
+        bool returnedCameraValid = false;
+        bool returnedMountValid = false;
+        PHD_Point returnedCameraOffset;
+        PHD_Point returnedMountOffset;
+        bool normalHandoffPossible = false;
+        bool deducedZeroMoveExpected = false;
+        bool baseDispValid = false;
+        PHD_Point baseDisp;
+        PHD_Point aggregateDelta;
+        bool largeCandidateJump = false;
+        unsigned int recentLargeCandidateCount = 0;
+        double jumpDistance = 0.;
+        wxString jumpState;
+        bool jumpRejected = false;
+        wxString outcome;
+        wxString reason;
+        std::vector<bool> contributorMask;
+        std::vector<unsigned int> addedContributors;
+        std::vector<unsigned int> removedContributors;
+        std::vector<JumpDiagStarSnapshot> stars;
+        bool referenceRepinned = false;
+    };
+
+    void JumpDiagReset();
+    void JumpDiagProcess(const JumpDiagFrameSnapshot& snapshot);
+    wxString JumpDiagTriggerReason(const JumpDiagFrameSnapshot& snapshot) const;
+    void JumpDiagEmitSnapshot(const JumpDiagFrameSnapshot& snapshot, const wxString& phase, unsigned int sequence) const;
+
+    bool m_jumpDiagLastAcceptedValid = false;
+    PHD_Point m_jumpDiagLastAcceptedDisp;
+    std::deque<JumpDiagFrameSnapshot> m_jumpDiagPreFrames;
+    std::deque<wxLongLong_t> m_jumpDiagLargeCandidateTimes;
+    unsigned int m_jumpDiagEpisodeId = 0;
+    bool m_jumpDiagCollectingPost = false;
+    unsigned int m_jumpDiagPostRemaining = 0;
+    wxString m_jumpDiagEpisodeReason;
+    wxLongLong_t m_jumpDiagCooldownUntil = 0;
+#endif
 
     Star m_solutionStar;   // estimated primary position (aggregate solution)
     Star m_displayStar;    // a real found star for UI/status (mass/SNR)

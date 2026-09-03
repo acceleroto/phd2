@@ -234,11 +234,197 @@ struct DistanceChecker2
 
 static DistanceChecker2 s_distanceChecker2;
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+// TODO(multistar2-jump-diagnostics): TEMPORARY
+// Remove with the matching declarations and capture sites after the jump investigation.
+void GuiderMultiStar2::JumpDiagReset()
+{
+    m_jumpDiagLastAcceptedValid = false;
+    m_jumpDiagLastAcceptedDisp.SetXY(0.0, 0.0);
+    m_jumpDiagPreFrames.clear();
+    m_jumpDiagLargeCandidateTimes.clear();
+    m_jumpDiagEpisodeId = 0;
+    m_jumpDiagCollectingPost = false;
+    m_jumpDiagPostRemaining = 0;
+    m_jumpDiagEpisodeReason.clear();
+    m_jumpDiagCooldownUntil = 0;
+}
+
+wxString GuiderMultiStar2::JumpDiagTriggerReason(const JumpDiagFrameSnapshot& snapshot) const
+{
+    if (!snapshot.guiding || snapshot.paused || snapshot.settling)
+        return wxEmptyString;
+
+    if (snapshot.jumpRejected)
+        return "jump_reject";
+    if (snapshot.referenceRepinned)
+        return "reference_repin";
+
+    const double threshold = snapshot.imageScaleKnown ? 2.0 / snapshot.imageScale : 1.0;
+    const double returnTolerance = snapshot.imageScaleKnown ? 0.5 / snapshot.imageScale : 0.5;
+    auto Distance = [](const PHD_Point& a, const PHD_Point& b) {
+        const double dx = a.X - b.X;
+        const double dy = a.Y - b.Y;
+        return sqrt(dx * dx + dy * dy);
+    };
+
+    if (snapshot.candidateValid && m_jumpDiagPreFrames.size() >= 2)
+    {
+        const JumpDiagFrameSnapshot& b = m_jumpDiagPreFrames[m_jumpDiagPreFrames.size() - 1];
+        const JumpDiagFrameSnapshot& a = m_jumpDiagPreFrames[m_jumpDiagPreFrames.size() - 2];
+        if (a.guiding && !a.paused && !a.settling && b.guiding && !b.paused && !b.settling && a.candidateValid &&
+            b.candidateValid && Distance(a.candidate, b.candidate) > threshold &&
+            Distance(b.candidate, snapshot.candidate) > threshold &&
+            Distance(a.candidate, snapshot.candidate) <= returnTolerance)
+        {
+            return "aba";
+        }
+    }
+
+    if (snapshot.largeCandidateJump && snapshot.recentLargeCandidateCount >= 2)
+        return "repeated_jump";
+
+    const bool previousSteady = !m_jumpDiagPreFrames.empty() && m_jumpDiagPreFrames.back().guiding &&
+        !m_jumpDiagPreFrames.back().paused && !m_jumpDiagPreFrames.back().settling;
+    if (previousSteady && (!snapshot.addedContributors.empty() || !snapshot.removedContributors.empty()) &&
+        sqrt(snapshot.aggregateDelta.X * snapshot.aggregateDelta.X + snapshot.aggregateDelta.Y * snapshot.aggregateDelta.Y) >
+            threshold)
+    {
+        return "membership_jump";
+    }
+
+    return wxEmptyString;
+}
+
+void GuiderMultiStar2::JumpDiagEmitSnapshot(const JumpDiagFrameSnapshot& snapshot, const wxString& phase,
+                                             unsigned int sequence) const
+{
+    const unsigned int episode = m_jumpDiagEpisodeId;
+    const wxString& trigger = m_jumpDiagEpisodeReason;
+    const double arcsecScale = snapshot.imageScaleKnown ? snapshot.imageScale : 0.0;
+    MS2LOGF("MultiStar2JumpDiag: episode=%u trigger=%s phase=%s seq=%u frame=%u timeMs=%lld guideTime=%.3f "
+            "state=%d guiding=%d paused=%d settling=%d outcome=%s reason=%s lockValid=%d lock=(%.3f,%.3f) "
+            "scale=%.6f scaleKnown=%d prevAcceptedValid=%d prevAccepted=(%.3f,%.3f) candidateValid=%d candidate=(%.3f,%.3f)\n",
+            episode, trigger, phase, sequence, snapshot.frameNumber, snapshot.timestampMs, snapshot.guidingTime,
+            snapshot.guiderState, snapshot.guiding ? 1 : 0, snapshot.paused ? 1 : 0, snapshot.settling ? 1 : 0,
+            snapshot.outcome, snapshot.reason, snapshot.lockValid ? 1 : 0, snapshot.lockPosition.X, snapshot.lockPosition.Y,
+            snapshot.imageScale, snapshot.imageScaleKnown ? 1 : 0, snapshot.previousAcceptedValid ? 1 : 0,
+            snapshot.previousAccepted.X, snapshot.previousAccepted.Y, snapshot.candidateValid ? 1 : 0, snapshot.candidate.X,
+            snapshot.candidate.Y);
+    MS2LOGF("MultiStar2JumpDiag: episode=%u trigger=%s phase=%s seq=%u frame=%u displayedValid=%d displayed=(%.3f,%.3f) "
+            "returnedCameraValid=%d returnedCamera=(%.3f,%.3f) returnedMountValid=%d "
+            "returnedMount=(%.3f,%.3f) normalHandoffPossible=%d deducedZero=%d "
+            "baseValid=%d base=(%.3f,%.3f) aggregateDelta=(%.3f,%.3f) largeCandidateJump=%d "
+            "recentLargeCandidates=%u jumpDistance=%.3f jumpState=%s jumpRejected=%d referenceRepinned=%d\n",
+            episode, trigger, phase, sequence, snapshot.frameNumber, snapshot.displayedValid ? 1 : 0, snapshot.displayed.X,
+            snapshot.displayed.Y,
+            snapshot.returnedCameraValid ? 1 : 0, snapshot.returnedCameraOffset.X, snapshot.returnedCameraOffset.Y,
+            snapshot.returnedMountValid ? 1 : 0, snapshot.returnedMountOffset.X, snapshot.returnedMountOffset.Y,
+            snapshot.normalHandoffPossible ? 1 : 0, snapshot.deducedZeroMoveExpected ? 1 : 0,
+            snapshot.baseDispValid ? 1 : 0, snapshot.baseDisp.X, snapshot.baseDisp.Y, snapshot.aggregateDelta.X,
+            snapshot.aggregateDelta.Y, snapshot.largeCandidateJump ? 1 : 0, snapshot.recentLargeCandidateCount,
+            snapshot.jumpDistance, snapshot.jumpState, snapshot.jumpRejected ? 1 : 0,
+            snapshot.referenceRepinned ? 1 : 0);
+    MS2LOGF("MultiStar2JumpDiag: episode=%u trigger=%s phase=%s seq=%u frame=%u "
+            "prevAcceptedArcsec=(%.3f,%.3f) candidateArcsec=(%.3f,%.3f) displayedArcsec=(%.3f,%.3f) "
+            "returnedCameraArcsec=(%.3f,%.3f) returnedMountArcsec=(%.3f,%.3f) aggregateDeltaArcsec=(%.3f,%.3f)\n",
+            episode, trigger, phase, sequence, snapshot.frameNumber, snapshot.previousAccepted.X * arcsecScale,
+            snapshot.previousAccepted.Y * arcsecScale, snapshot.candidate.X * arcsecScale, snapshot.candidate.Y * arcsecScale,
+            snapshot.displayed.X * arcsecScale, snapshot.displayed.Y * arcsecScale,
+            snapshot.returnedCameraOffset.X * arcsecScale, snapshot.returnedCameraOffset.Y * arcsecScale,
+            snapshot.returnedMountOffset.X * arcsecScale, snapshot.returnedMountOffset.Y * arcsecScale,
+            snapshot.aggregateDelta.X * arcsecScale,
+            snapshot.aggregateDelta.Y * arcsecScale);
+
+    wxString contributors;
+    for (size_t i = 0; i < snapshot.contributorMask.size(); i++)
+        contributors += wxString::Format("%s%u:%d", i ? "," : "", (unsigned int) i, snapshot.contributorMask[i] ? 1 : 0);
+    wxString added;
+    for (size_t i = 0; i < snapshot.addedContributors.size(); i++)
+        added += wxString::Format("%s%u", i ? "," : "", snapshot.addedContributors[i]);
+    wxString removed;
+    for (size_t i = 0; i < snapshot.removedContributors.size(); i++)
+        removed += wxString::Format("%s%u", i ? "," : "", snapshot.removedContributors[i]);
+    MS2LOGF("MultiStar2JumpDiag: episode=%u trigger=%s phase=%s seq=%u frame=%u contributors=[%s] added=[%s] "
+            "removed=[%s]\n",
+            episode, trigger, phase, sequence, snapshot.frameNumber, contributors, added, removed);
+
+    for (const auto& star : snapshot.stars)
+    {
+        MS2LOGF("MultiStar2JumpDiag: episode=%u trigger=%s phase=%s seq=%u frame=%u star=%u expectedValid=%d "
+                "expected=(%.3f,%.3f) found=%d measured=(%.3f,%.3f) referenceValid=%d reference=(%.3f,%.3f) "
+                "displacement=(%.3f,%.3f) snr=%.3f mass=%.3f adjustedMass=%.6f median=%.6f\n",
+                episode, trigger, phase, sequence, snapshot.frameNumber, star.index, star.expectedValid ? 1 : 0, star.expected.X,
+                star.expected.Y, star.found ? 1 : 0, star.measured.X, star.measured.Y, star.referenceValid ? 1 : 0,
+                star.reference.X, star.reference.Y, star.displacement.X, star.displacement.Y, star.snr, star.mass,
+                star.adjustedMass, star.massMedian);
+        MS2LOGF("MultiStar2JumpDiag: episode=%u trigger=%s phase=%s seq=%u frame=%u star=%u "
+                "massBoundsValid=%d bounds=(%.6f,%.6f) spike=%.6f massRejected=%d reacquire=%u "
+                "eligibility=%s contributing=%d weight=%.3f repinned=%d oldRef=(%.3f,%.3f) "
+                "newRef=(%.3f,%.3f) prePinDisp=(%.3f,%.3f) displacementArcsec=(%.3f,%.3f)\n",
+                episode, trigger, phase, sequence, snapshot.frameNumber, star.index, star.massBoundsValid ? 1 : 0,
+                star.massLowBound, star.massHighBound, star.massSpikeBound,
+                star.massRejected ? 1 : 0, star.reacquireGoodCount, star.eligibilityReason, star.contributing ? 1 : 0,
+                star.weight, star.repinned ? 1 : 0, star.oldReference.X, star.oldReference.Y, star.newReference.X,
+                star.newReference.Y, star.prePinDisplacement.X, star.prePinDisplacement.Y, star.displacement.X * arcsecScale,
+                star.displacement.Y * arcsecScale);
+    }
+}
+
+void GuiderMultiStar2::JumpDiagProcess(const JumpDiagFrameSnapshot& snapshot)
+{
+    if (m_jumpDiagCollectingPost)
+    {
+        m_jumpDiagLargeCandidateTimes.clear();
+        const unsigned int sequence = 11 - m_jumpDiagPostRemaining;
+        JumpDiagEmitSnapshot(snapshot, "post", sequence);
+        if (--m_jumpDiagPostRemaining == 0)
+        {
+            m_jumpDiagCollectingPost = false;
+            m_jumpDiagCooldownUntil = snapshot.timestampMs + 60000;
+        }
+    }
+    else if (snapshot.timestampMs < m_jumpDiagCooldownUntil)
+    {
+        m_jumpDiagLargeCandidateTimes.clear();
+    }
+    else if (m_jumpDiagPreFrames.size() >= 20)
+    {
+        const wxString trigger = JumpDiagTriggerReason(snapshot);
+        if (!trigger.empty())
+        {
+            ++m_jumpDiagEpisodeId;
+            m_jumpDiagEpisodeReason = trigger;
+            // TODO(multistar2-jump-diagnostics): TEMPORARY
+            pFrame->Alert(wxString::Format("Multistar2 tracking event detected (episode %u, trigger %s, frame %u). "
+                                           "Check the debug log for details.",
+                                           m_jumpDiagEpisodeId, m_jumpDiagEpisodeReason, snapshot.frameNumber));
+            unsigned int sequence = 1;
+            const size_t first = m_jumpDiagPreFrames.size() > 20 ? m_jumpDiagPreFrames.size() - 20 : 0;
+            for (size_t i = first; i < m_jumpDiagPreFrames.size(); i++)
+                JumpDiagEmitSnapshot(m_jumpDiagPreFrames[i], "pre", sequence++);
+            JumpDiagEmitSnapshot(snapshot, "event", 0);
+            m_jumpDiagCollectingPost = true;
+            m_jumpDiagPostRemaining = 10;
+            m_jumpDiagLargeCandidateTimes.clear();
+        }
+    }
+
+    m_jumpDiagPreFrames.push_back(snapshot);
+    while (m_jumpDiagPreFrames.size() > 20)
+        m_jumpDiagPreFrames.pop_front();
+}
+#endif
+
 GuiderMultiStar2::GuiderMultiStar2(wxWindow *parent) : GuiderMultiStar(parent)
 {
     // Ensure our override is actually used for paint events. GuiderMultiStar registers its own
     // EVT_PAINT handler via an event table, which does not virtual-dispatch to overrides.
     Bind(wxEVT_PAINT, &GuiderMultiStar2::OnPaint, this);
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    JumpDiagReset();
+#endif
 }
  
 GuiderMultiStar2::~GuiderMultiStar2() { }
@@ -309,6 +495,10 @@ void GuiderMultiStar2::InvalidateCurrentPosition(bool fullReset)
     m_solutionStarsUsed = 0;
     m_maxConcurrentStarsUsed = 0;
     m_starState.clear();
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    JumpDiagReset();
+#endif
 }
 
 bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset *ofs, FrameDroppedInfo *errorInfo)
@@ -321,6 +511,113 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     unsigned int rejectNotFound = 0;
     unsigned int rejectMass = 0;
     unsigned int rejectReacquireGate = 0;
+
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    // Capture is observation-only; FinalizeJumpDiag is called immediately before every return.
+    JumpDiagFrameSnapshot jumpDiag;
+    auto InitDiagPoint = [](PHD_Point& point) { point.SetXY(0.0, 0.0); };
+    jumpDiag.frameNumber = pImage->FrameNum;
+    jumpDiag.timestampMs = ::wxGetUTCTimeMillis().GetValue();
+    jumpDiag.guidingTime = pFrame->TimeSinceGuidingStarted();
+    jumpDiag.guiderState = (int) GetState();
+    jumpDiag.guiding = GetState() == STATE_GUIDING;
+    jumpDiag.paused = IsPaused();
+    jumpDiag.settling = PhdController::IsSettling();
+    jumpDiag.lockValid = LockPosition().IsValid();
+    InitDiagPoint(jumpDiag.lockPosition);
+    if (jumpDiag.lockValid)
+        jumpDiag.lockPosition = LockPosition();
+    jumpDiag.imageScale = pFrame->GetCameraPixelScale();
+    jumpDiag.imageScaleKnown = jumpDiag.imageScale > 0.0 && jumpDiag.imageScale != 1.0;
+    jumpDiag.previousAcceptedValid = m_jumpDiagLastAcceptedValid;
+    InitDiagPoint(jumpDiag.previousAccepted);
+    if (jumpDiag.previousAcceptedValid)
+        jumpDiag.previousAccepted = m_jumpDiagLastAcceptedDisp;
+    InitDiagPoint(jumpDiag.candidate);
+    InitDiagPoint(jumpDiag.displayed);
+    InitDiagPoint(jumpDiag.returnedCameraOffset);
+    InitDiagPoint(jumpDiag.returnedMountOffset);
+    InitDiagPoint(jumpDiag.baseDisp);
+    jumpDiag.aggregateDelta.SetXY(0.0, 0.0);
+    jumpDiag.contributorMask.assign(poolSize, false);
+    jumpDiag.stars.resize(poolSize);
+    for (size_t i = 0; i < jumpDiag.stars.size(); i++)
+    {
+        JumpDiagStarSnapshot& star = jumpDiag.stars[i];
+        star.index = (unsigned int) i;
+        InitDiagPoint(star.expected);
+        InitDiagPoint(star.measured);
+        InitDiagPoint(star.reference);
+        InitDiagPoint(star.displacement);
+        InitDiagPoint(star.oldReference);
+        InitDiagPoint(star.newReference);
+        InitDiagPoint(star.prePinDisplacement);
+        if (m_guideStars[i].referencePoint.IsValid())
+        {
+            star.referenceValid = true;
+            star.reference = m_guideStars[i].referencePoint;
+        }
+        star.reacquireGoodCount = m_starState.size() > i ? m_starState[i].reacquireGoodCount : 0;
+        star.eligibilityReason = "not_examined";
+    }
+    auto FinalizeJumpDiag = [&](const wxString& outcome, const wxString& reason, bool success) {
+        jumpDiag.outcome = outcome;
+        jumpDiag.reason = reason;
+        jumpDiag.deducedZeroMoveExpected = !success && GetState() == STATE_GUIDING;
+        // The caller may still choose recenter/measurement handling; the GuideLog confirms the actual handoff.
+        jumpDiag.normalHandoffPossible = success && GetState() == STATE_GUIDING && !IsPaused() && !IsRecentering();
+        jumpDiag.addedContributors.clear();
+        jumpDiag.removedContributors.clear();
+        if (!m_jumpDiagPreFrames.empty() && m_jumpDiagPreFrames.back().contributorMask.size() == jumpDiag.contributorMask.size())
+        {
+            const std::vector<bool>& previousMask = m_jumpDiagPreFrames.back().contributorMask;
+            for (size_t i = 0; i < jumpDiag.contributorMask.size(); i++)
+            {
+                if (jumpDiag.contributorMask[i] != previousMask[i])
+                    (jumpDiag.contributorMask[i] ? jumpDiag.addedContributors : jumpDiag.removedContributors)
+                        .push_back((unsigned int) i);
+            }
+        }
+        if (success)
+        {
+            if (ofs->cameraOfs.IsValid())
+            {
+                jumpDiag.returnedCameraValid = true;
+                jumpDiag.returnedCameraOffset = ofs->cameraOfs;
+            }
+            if (ofs->mountOfs.IsValid())
+            {
+                jumpDiag.returnedMountValid = true;
+                jumpDiag.returnedMountOffset = ofs->mountOfs;
+            }
+        }
+        const bool steadyGuiding = jumpDiag.guiding && !jumpDiag.paused && !jumpDiag.settling;
+        if (!steadyGuiding)
+            m_jumpDiagLargeCandidateTimes.clear();
+        while (steadyGuiding && !m_jumpDiagLargeCandidateTimes.empty() &&
+               jumpDiag.timestampMs - m_jumpDiagLargeCandidateTimes.front() > 20000)
+        {
+            m_jumpDiagLargeCandidateTimes.pop_front();
+        }
+        if (steadyGuiding && jumpDiag.candidateValid && jumpDiag.previousAcceptedValid)
+        {
+            const double dx = jumpDiag.candidate.X - jumpDiag.previousAccepted.X;
+            const double dy = jumpDiag.candidate.Y - jumpDiag.previousAccepted.Y;
+            const double threshold = jumpDiag.imageScaleKnown ? 2.0 / jumpDiag.imageScale : 1.0;
+            jumpDiag.largeCandidateJump = sqrt(dx * dx + dy * dy) > threshold;
+            if (jumpDiag.largeCandidateJump)
+                m_jumpDiagLargeCandidateTimes.push_back(jumpDiag.timestampMs);
+        }
+        jumpDiag.recentLargeCandidateCount = (unsigned int) m_jumpDiagLargeCandidateTimes.size();
+        JumpDiagProcess(jumpDiag);
+        if (success && jumpDiag.candidateValid)
+        {
+            m_jumpDiagLastAcceptedDisp = jumpDiag.candidate;
+            m_jumpDiagLastAcceptedValid = true;
+        }
+    };
+#endif
 
     auto JoinUnsigned = [](const std::vector<unsigned int>& vals) -> wxString {
         wxString s;
@@ -373,6 +670,10 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         EmitFrameSummary("drop", "no_star_selected", 0, 0, false, 0.0, PHD_Point(0.0, 0.0), PHD_Point(0.0, 0.0), false, "", "",
                          "");
         EmitRejectBreakdown("no_star_selected", 0, 0, false, "", "", "");
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        FinalizeJumpDiag("drop", "no_star_selected", false);
+#endif
         return true;
     }
 
@@ -390,6 +691,11 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     };
 
     auto massReject = [&](StarState& st, double mass) -> bool {
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        JumpDiagStarSnapshot& diagStar = jumpDiag.stars[(size_t) (&st - &m_starState[0])];
+        diagStar.adjustedMass = adjMass(mass);
+#endif
         if (!m_massChangeThresholdEnabled)
             return false;
 
@@ -425,6 +731,14 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         double high = st.highMass * (1. + m_massChangeThreshold);
         double spike = med * (1. + 2.0 * m_massChangeThreshold);
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        diagStar.massMedian = med;
+        diagStar.massLowBound = low;
+        diagStar.massHighBound = high;
+        diagStar.massSpikeBound = spike;
+        diagStar.massBoundsValid = true;
+#endif
         return am < low || am > high || am > spike;
     };
 
@@ -456,6 +770,33 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         GuideStar s(gs);
         bool ok = false;
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        JumpDiagStarSnapshot& diagStar = jumpDiag.stars[i];
+        diagStar.index = (unsigned int) i;
+        if (gs.referencePoint.IsValid())
+        {
+            diagStar.referenceValid = true;
+            diagStar.reference = gs.referencePoint;
+        }
+        diagStar.reacquireGoodCount = st.reacquireGoodCount;
+        if (st.lastPosValid)
+        {
+            diagStar.expectedValid = true;
+            diagStar.expected = st.lastPos;
+        }
+        else if (i > 0)
+        {
+            diagStar.expectedValid = true;
+            diagStar.expected = refPrimary + gs.offsetFromPrimary;
+        }
+        else
+        {
+            diagStar.expectedValid = true;
+            diagStar.expected.SetXY(s.X, s.Y);
+        }
+#endif
+
         if (st.lastPosValid)
         {
             ok = s.Find(pImage, m_searchRegion, st.lastPos.X, st.lastPos.Y, pFrame->GetStarFindMode(), GetMinStarHFD(),
@@ -479,6 +820,11 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
             gs.wasLost = true;
             st.reacquireGoodCount = 0;
             rejectNotFound++;
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+            // TODO(multistar2-jump-diagnostics): TEMPORARY
+            diagStar.eligibilityReason = "not_found";
+            diagStar.reacquireGoodCount = 0;
+#endif
             continue;
         }
 
@@ -508,18 +854,57 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
             rejectReacquireGate++;
         bool eligible = gatedIn && !reject;
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        diagStar.found = true;
+        diagStar.measured.SetXY(s.X, s.Y);
+        if (gs.referencePoint.IsValid())
+            diagStar.displacement.SetXY(s.X - gs.referencePoint.X, s.Y - gs.referencePoint.Y);
+        diagStar.snr = s.SNR;
+        diagStar.mass = s.Mass;
+        diagStar.massRejected = reject;
+        diagStar.reacquireGoodCount = st.reacquireGoodCount;
+        diagStar.eligibilityReason = reject ? "mass_rejected" : (!gatedIn ? "reacquire_gate" : "eligible");
+#endif
+
         // Mark as "found but not contributing yet" if gated/rejected
         found.push_back({ i, s, eligible });
     }
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    for (size_t i = allowSecondaries ? m_guideStars.size() : wxMin((size_t) 1, m_guideStars.size()); i < m_guideStars.size(); i++)
+    {
+        jumpDiag.stars[i].index = (unsigned int) i;
+        if (m_guideStars[i].referencePoint.IsValid())
+        {
+            jumpDiag.stars[i].referenceValid = true;
+            jumpDiag.stars[i].reference = m_guideStars[i].referencePoint;
+        }
+        jumpDiag.stars[i].reacquireGoodCount = m_starState[i].reacquireGoodCount;
+        jumpDiag.stars[i].eligibilityReason = "secondaries_disabled";
+    }
+#endif
+
     if (found.empty())
     {
         SetDroppedFrameInfo(pImage, errorInfo, _("Star lost"), 0.0, 0.0, 0.0, false, true);
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        const DistanceChecker2::State jumpStateBeforeActivate = s_distanceChecker2.CurrentState();
+#endif
         s_distanceChecker2.Activate();
         // Use max exposure duration while no usable stars are available.
         EmitFrameSummary("drop", "all_lost", (unsigned int) found.size(), 0, false, 0.0, prevDisp, PHD_Point(0.0, 0.0), false,
                          "", "", "");
         EmitRejectBreakdown("all_lost", (unsigned int) found.size(), 0, false, "", "", "");
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        jumpDiag.jumpState = wxString::Format("before=%s,event=activate,after=%s", DistanceChecker2::StateName(
+                                                  jumpStateBeforeActivate),
+                                              DistanceChecker2::StateName(s_distanceChecker2.CurrentState()));
+        FinalizeJumpDiag("drop", "all_lost", false);
+#endif
         return true;
     }
 
@@ -540,6 +925,11 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         if (sumW > 0.0)
             baseDisp.SetXY(sumDX / sumW, sumDY / sumW);
     }
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    jumpDiag.baseDispValid = true;
+    jumpDiag.baseDisp = baseDisp;
+#endif
 
     // For stars transitioning into "eligible", pin their referencePoint so they don't pull the solution
     for (const auto& f : found)
@@ -552,10 +942,29 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
 #if MULTISTAR2_DEBUG_LOG
             const PHD_Point oldRef = gs.referencePoint;
 #endif
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+            // TODO(multistar2-jump-diagnostics): TEMPORARY
+            JumpDiagStarSnapshot& diagStar = jumpDiag.stars[f.idx];
+            diagStar.repinned = true;
+            if (gs.referencePoint.IsValid())
+            {
+                diagStar.oldReference = gs.referencePoint;
+                diagStar.prePinDisplacement.SetXY(f.star.X - gs.referencePoint.X, f.star.Y - gs.referencePoint.Y);
+            }
+            else
+                diagStar.prePinDisplacement = baseDisp;
+            diagStar.eligibilityReason += "|reacquire_repin";
+#endif
             gs.referencePoint.X = f.star.X - baseDisp.X;
             gs.referencePoint.Y = f.star.Y - baseDisp.Y;
             gs.wasLost = false;
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+            // TODO(multistar2-jump-diagnostics): TEMPORARY
+            diagStar.newReference = gs.referencePoint;
+            diagStar.displacement.SetXY(f.star.X - gs.referencePoint.X, f.star.Y - gs.referencePoint.Y);
+            jumpDiag.referenceRepinned = true;
+#endif
 #if MULTISTAR2_DEBUG_LOG
             MS2LOGF("MultiStar2: reacquire idx=%u reacqGood=%u star=(%.2f,%.2f) baseDisp=(%.3f,%.3f) ref: (%.3f,%.3f)->(%.3f,%.3f)\n",
                     (unsigned int) f.idx, m_starState[f.idx].reacquireGoodCount, f.star.X, f.star.Y, baseDisp.X, baseDisp.Y,
@@ -564,9 +973,22 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         }
         else if (!gs.referencePoint.IsValid())
         {
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+            // TODO(multistar2-jump-diagnostics): TEMPORARY
+            JumpDiagStarSnapshot& diagStar = jumpDiag.stars[f.idx];
+            diagStar.repinned = true;
+            diagStar.prePinDisplacement = baseDisp;
+            diagStar.eligibilityReason += "|invalid_reference_repin";
+#endif
             gs.referencePoint.X = f.star.X - baseDisp.X;
             gs.referencePoint.Y = f.star.Y - baseDisp.Y;
             gs.wasLost = false;
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+            // TODO(multistar2-jump-diagnostics): TEMPORARY
+            diagStar.newReference = gs.referencePoint;
+            diagStar.displacement.SetXY(f.star.X - gs.referencePoint.X, f.star.Y - gs.referencePoint.Y);
+            jumpDiag.referenceRepinned = true;
+#endif
         }
         else
         {
@@ -587,6 +1009,12 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         sumDX += w * (f.star.X - gs.referencePoint.X);
         sumDY += w * (f.star.Y - gs.referencePoint.Y);
         m_starState[f.idx].contributingThisFrame = true;
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        jumpDiag.stars[f.idx].contributing = true;
+        jumpDiag.stars[f.idx].weight = w;
+        jumpDiag.contributorMask[f.idx] = true;
+#endif
         if (best == (size_t) -1 || f.star.SNR > found[best].star.SNR)
             best = &f - &found[0];
     }
@@ -610,17 +1038,37 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
 
         SetDroppedFrameInfo(pImage, errorInfo, _("Recovering"), m_displayStar.Mass, m_displayStar.SNR, m_displayStar.HFD, true,
                             true);
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        const DistanceChecker2::State jumpStateBeforeActivate = s_distanceChecker2.CurrentState();
+#endif
         s_distanceChecker2.Activate();
         // Use max exposure duration while recovering from unusable contributors.
         EmitFrameSummary("recovering", "no_contributors", (unsigned int) found.size(), contributing, false, 0.0, prevDisp,
                          PHD_Point(0.0, 0.0), false, "", "", "");
         EmitRejectBreakdown("no_contributors", (unsigned int) found.size(), contributing, false, "", "", "");
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        jumpDiag.jumpState =
+            wxString::Format("before=%s,event=activate,after=%s", DistanceChecker2::StateName(jumpStateBeforeActivate),
+                             DistanceChecker2::StateName(s_distanceChecker2.CurrentState()));
+        FinalizeJumpDiag("recovering", "no_contributors", false);
+#endif
         return true;
     }
 
     PHD_Point disp = baseDisp;
     if (sumW > 0.0)
         disp.SetXY(sumDX / sumW, sumDY / sumW);
+
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    jumpDiag.candidateValid = true;
+    jumpDiag.candidate = disp;
+    jumpDiag.aggregateDelta =
+        !m_jumpDiagPreFrames.empty() && m_jumpDiagPreFrames.back().candidateValid ? disp - m_jumpDiagPreFrames.back().candidate
+                                                                                  : disp - prevDisp;
+#endif
 
     // Build solution star from lockPos + displacement
     if (lockPos.IsValid())
@@ -673,6 +1121,12 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         addedStr = JoinUnsigned(added);
         removedStr = JoinUnsigned(removed);
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        jumpDiag.addedContributors = added;
+        jumpDiag.removedContributors = removed;
+#endif
+
         const bool anyMembershipChange = !added.empty() || !removed.empty();
         const bool anySummaryChange = (poolSize != m_dbgLastPoolSize) || (foundCount != m_dbgLastFoundCount) ||
             (usedCount != m_dbgLastUsedCount) || (primaryContrib != m_dbgLastPrimaryContrib);
@@ -713,6 +1167,16 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     m_solutionStar.HFD = m_displayStar.HFD;
     m_solutionStar.PeakVal = m_displayStar.PeakVal;
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    // "displayed" is the aggregate solution displacement, not the profile/UI star.
+    if (lockPos.IsValid())
+    {
+        jumpDiag.displayedValid = true;
+        jumpDiag.displayed = m_solutionStar - lockPos;
+    }
+#endif
+
     // Compute offsets vs lock position (as in multistar)
     double distance = 0.;
     double distanceRA = 0.;
@@ -728,6 +1192,11 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
     }
 
     double tolerance = m_tolerateJumpsEnabled ? m_tolerateJumpsThreshold : 9e99;
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    const DistanceChecker2::State jumpStateBeforeCheck = s_distanceChecker2.CurrentState();
+    jumpDiag.jumpDistance = distance;
+#endif
     if (!s_distanceChecker2.CheckDistance(distance, raOnly, tolerance))
     {
         SetDroppedFrameInfo(pImage, errorInfo, _("Recovering"), m_displayStar.Mass, m_displayStar.SNR, m_displayStar.HFD, true,
@@ -739,8 +1208,25 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
         EmitFrameSummary("recovering", "jump_reject", (unsigned int) found.size(), contributing, primaryContrib, distance, disp,
                          dDisp, true, usedIdxStr, addedStr, removedStr);
         EmitRejectBreakdown("jump_reject", (unsigned int) found.size(), contributing, true, usedIdxStr, addedStr, removedStr);
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+        // TODO(multistar2-jump-diagnostics): TEMPORARY
+        jumpDiag.jumpRejected = true;
+        jumpDiag.jumpState =
+            wxString::Format("before=%s,check=reject,after=%s,tolerance=%.3f",
+                             DistanceChecker2::StateName(jumpStateBeforeCheck),
+                             DistanceChecker2::StateName(s_distanceChecker2.CurrentState()), tolerance);
+        FinalizeJumpDiag("recovering", "jump_reject", false);
+#endif
         return true;
     }
+
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    jumpDiag.jumpState =
+        wxString::Format("before=%s,check=accept,after=%s,tolerance=%.3f",
+                         DistanceChecker2::StateName(jumpStateBeforeCheck),
+                         DistanceChecker2::StateName(s_distanceChecker2.CurrentState()), tolerance);
+#endif
 
     ImageLogger::LogImage(pImage, distance);
     UpdateCurrentDistance(distance, distanceRA);
@@ -764,6 +1250,10 @@ bool GuiderMultiStar2::UpdateCurrentPosition(const usImage *pImage, GuiderOffset
                          usedIdxStr, addedStr, removedStr);
     }
 
+#if MULTISTAR2_JUMP_DIAGNOSTICS
+    // TODO(multistar2-jump-diagnostics): TEMPORARY
+    FinalizeJumpDiag("ok", "ok", true);
+#endif
     return false;
 }
 
